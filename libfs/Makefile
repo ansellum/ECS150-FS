@@ -6,7 +6,7 @@ CFLAGS	:= -Wall -Wextra -Werror
 
 # C files to compile
 src=$(wildcard *.c)
-objs=$(patsubst %.c,%.o,$(SRC))
+objs=$(patsubst %.c,%.o,$(src))
 
 # Target library
 lib := libfs.a

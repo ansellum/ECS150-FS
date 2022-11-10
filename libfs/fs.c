@@ -45,7 +45,7 @@ struct __attribute__((__packed__)) superblock {
 * FAT index:	0	1	2	3	4	5	6	7	8	9	10	…
 * Content:	0xFFFF	8	3	4	5	6	0xFFFF	0	0xFFFF	0	0	…
 */
-struct __attribute__((__packed__)) fat {
+struct __attribute__((__packed__)) FAT {
 	uint16_t* entry; // 16-bit entries; # of entries determined at runtime
 };
 
@@ -61,7 +61,7 @@ struct __attribute__((__packed__)) fat {
 * 0x14		2		Index of the first data block
 * 0x16		10		Unused/Padding
 */
-struct __attribute__((__packed__)) rootDir {
+struct __attribute__((__packed__)) root_dir {
 	uint32_t file[FS_NUM_OF_FILES]; // Each file entry has the above layout
 };
 
