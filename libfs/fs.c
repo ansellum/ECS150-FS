@@ -37,7 +37,7 @@ struct rootDir* root_dir;
 * 0x11		4079		Unused/Padding
 */
 struct superblock {
-	char sig[8];			// signature: ECS150FS 
+	uint8_t sig[8];			// signature: ECS150FS 
 
 	uint16_t totalNumOfBlocks;	// Total amount of blocks of virtual disk
 	uint16_t indexOfRootDir;	// Root directory block index
@@ -73,10 +73,10 @@ struct FATEntry {
 * 0x16		10		Unused/Padding
 */
 struct fileEntry {
-	char fileName[FS_FILENAME_LEN];
+	uint8_t fileName[FS_FILENAME_LEN];
 
-	uint32_t fileSize;         // Length 4 bytes file size
-	uint8_t  indexOfDataBlock; // Index of the first data block
+	uint32_t fileSize;		// Length 4 bytes file size
+	uint16_t  indexOfDataBlock;	// Index of the first data block
 	uint8_t  unused[10];
 } __attribute__((__packed__));
 
