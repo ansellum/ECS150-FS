@@ -49,8 +49,8 @@ struct superblock {
 * FAT index:	0	1	2	3	4	5	6	7	8	9	10	…
 * Content:	0xFFFF	8	3	4	5	6	0xFFFF	0	0xFFFF	0	0	…
 */
-struct FAT_entry {
-	uint16_t entry;
+struct FAT {
+	uint16_t entry[4 * FS_FAT_ENTRY_MAX_COUNT]; // Maximum of 8192 data blocks => Maximum of 4 FAT blocks
 }__attribute__((packed));
 
 /*
@@ -77,7 +77,7 @@ struct root_dir {
 
 /* Global Variables*/
 struct superblock superblock;
-struct FAT_entry FAT[4 * FS_FAT_ENTRY_MAX_COUNT]; // Maximum of 4 FAT blocks, 2048 entires each
+struct FAT FAT; // Maximum of 4 FAT blocks, 2048 entires each
 struct root_dir root_dir;
 
 /* Filesystem Functions */
@@ -103,10 +103,10 @@ int fs_mount(const char *diskname)
 		return -1;
 	}
 
-	// Iterate through FAT blocks
+	// Read FAT by iterating at a block-level
 	for (int i = 0; i < superblock.fat_blk_count; ++i) {
 		// Read FAT block into entry address
-		if (block_read(i + 1, &(FAT[i * FS_FAT_ENTRY_MAX_COUNT])) < 0) {
+		if (block_read(i + 1, &(FAT.entry[i * FS_FAT_ENTRY_MAX_COUNT])) < 0) {
 			fs_error("Couldn't read FAT");
 			return -1;
 		}
@@ -147,7 +147,7 @@ int fs_info(void)
 	// FAT Traversal
 	int free_data_blk_count = superblock.data_blk_count;
 	for (int i = 0; i < superblock.data_blk_count; ++i) {
-		if (FAT[i].entry == '\0')
+		if (FAT.entry[i] == '\0')
 			continue;
 		free_data_blk_count--;
 	}
