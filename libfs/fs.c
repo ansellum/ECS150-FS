@@ -7,7 +7,15 @@
 #include "disk.h"
 #include "fs.h"
 
-#define FS_NUM_OF_FILES 128
+#define fs_error(fmt, ...) \
+	fprintf(stderr, "%s: "fmt"\n", __func__, ##__VA_ARGS__)
+
+/* Global Variables*/
+struct superblock superblock;
+struct FAT FAT;
+struct rootDir root_dir;
+
+/* Data Structures */
 
 /* 
 * The superblock is the first block of the file system.
@@ -23,8 +31,7 @@
 * 0x10		1		Number of blocks for FAT
 * 0x11		4079		Unused/Padding
 */
-
-struct __attribute__((__packed__)) superblock {
+struct superblock {
 	char sig[8];			// signature: ECS150FS 
 
 	uint16_t totalNumOfBlocks;	// Total amount of blocks of virtual disk
@@ -34,7 +41,7 @@ struct __attribute__((__packed__)) superblock {
 
 	uint8_t  numOfFatBlocks;	// Number of blocks for FAT
 	uint8_t  unused[4079];		// Padding
-};
+}__attribute__((__packed__));
 
 /*
 * The FAT is a flat array, possibly spanning several blocks,
@@ -45,9 +52,9 @@ struct __attribute__((__packed__)) superblock {
 * FAT index:	0	1	2	3	4	5	6	7	8	9	10	…
 * Content:	0xFFFF	8	3	4	5	6	0xFFFF	0	0xFFFF	0	0	…
 */
-struct __attribute__((__packed__)) FAT {
+struct FAT {
 	uint16_t* entry; // 16-bit entries; # of entries determined at runtime
-};
+}__attribute__((__packed__));
 
 
 /*
@@ -61,13 +68,40 @@ struct __attribute__((__packed__)) FAT {
 * 0x14		2		Index of the first data block
 * 0x16		10		Unused/Padding
 */
-struct __attribute__((__packed__)) root_dir {
-	uint32_t file[FS_NUM_OF_FILES]; // Each file entry has the above layout
-};
+struct rootDir {
+	uint32_t file[FS_FILE_MAX_COUNT]; // Each file entry has the above layout, which will be defined later
+}__attribute__((__packed__));
 
+/* Filesystem Functions */
 int fs_mount(const char *diskname)
 {
-	/* TODO: Phase 1 */
+	/* Mount disk */
+
+	// Open file
+	if (block_disk_open(diskname) < 0) {
+		perror("block_disk_open");
+		return -1;
+	}
+
+	// Read in superblock
+	if (block_read(0, &superblock) < 0) {
+		perror("block_read");
+		return -1;
+	}
+
+	/* Error checking */
+
+	// Check signature
+	if (strcmp(superblock.sig, "ECS150FS") != 0) {
+		fs_error("Filesystem has an invalid format");
+		return -1;
+	}
+
+	// Check disk size
+	if (superblock.totalNumOfBlocks != block_disk_count()) {
+		fs_error("Mismatched number of blocks");
+		return -1;
+	}
 }
 
 int fs_umount(void)
