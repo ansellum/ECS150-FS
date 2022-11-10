@@ -15,13 +15,7 @@
 #define FS_FAT_ENTRY_MAX_COUNT 2048
 #define SIGNATURE 0x5346303531534345	// ECS150 in little-endian
 
-/* Global Variables*/
-struct superblock superblock;
-struct FAT_entry* FAT;		// Array of uint16_t objects
-struct root_dir root_dir;
-
 /* Data Structures */
-
 /* 
 * The superblock is the first block of the file system.
 * Its internal format is:
@@ -71,9 +65,9 @@ struct FAT_entry {
 * 0x16		10		Unused/Padding
 */
 struct file_entry {
-	uint8_t fileName[FS_FILENAME_LEN];
+	uint8_t  fileName[FS_FILENAME_LEN];
 	uint32_t fileSize;		// Length 4 bytes file size
-	uint16_t  indexOfDataBlock;	// Index of the first data block
+	uint16_t indexOfDataBlock;	// Index of the first data block
 	uint8_t  unused[10];
 } __attribute__((packed));
 
@@ -81,6 +75,12 @@ struct root_dir {
 	struct file_entry file[FS_FILE_MAX_COUNT]; // Each file entry has the above layout, which will be defined later
 }__attribute__((packed));
 
+/* Global Variables*/
+struct superblock superblock;
+struct FAT_entry FAT[4 * (BLOCK_SIZE / 2)]; // Maximum of 4 FAT blocks, 2048 entires each
+struct root_dir root_dir;
+
+/* Filesystem Functions */
 void print_superblock(void)
 {
 	fprintf(stderr, "Signature:        \t%lx\n", superblock.sig);
@@ -114,7 +114,6 @@ int fs_mount(const char *diskname)
 	}
 
 	// Iterate through FAT blocks
-	FAT = malloc(superblock.numOfDataBlocks * sizeof(uint16_t));
 	for (int i = 0; i < superblock.numOfFatBlocks; ++i) {
 		// Read FAT block into entry address
 		if (block_read(i + 1, &(FAT[i * FS_FAT_ENTRY_MAX_COUNT])) < 0) {
