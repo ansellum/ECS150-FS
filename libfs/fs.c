@@ -12,7 +12,7 @@
 
 #define UNUSED(x) (void)(x)
 
-#define FS_FAT_ENTRY_MAX_COUNT 2048
+#define FS_FAT_ENTRY_MAX_COUNT (BLOCK_SIZE/2)
 #define SIGNATURE 0x5346303531534345	// ECS150 in little-endian
 
 /* Data Structures */
@@ -77,20 +77,10 @@ struct root_dir {
 
 /* Global Variables*/
 struct superblock superblock;
-struct FAT_entry FAT[4 * (BLOCK_SIZE / 2)]; // Maximum of 4 FAT blocks, 2048 entires each
+struct FAT_entry FAT[4 * FS_FAT_ENTRY_MAX_COUNT]; // Maximum of 4 FAT blocks, 2048 entires each
 struct root_dir root_dir;
 
 /* Filesystem Functions */
-void print_superblock(void)
-{
-	fprintf(stderr, "Signature:        \t%lx\n", superblock.sig);
-	fprintf(stderr, "totalNumOfBlocks: \t%x\n", superblock.totalNumOfBlocks);
-	fprintf(stderr, "indexOfRootDir:   \t%x\n", superblock.indexOfRootDir);
-	fprintf(stderr, "indexOfDataBlocks:\t%x\n", superblock.indexOfDataBlocks);
-	fprintf(stderr, "numOfDataBlocks:  \t%x\n", superblock.numOfDataBlocks);
-	fprintf(stderr, "numOfFatBlocks:   \t%x\n", superblock.numOfFatBlocks);
-}
-
 int fs_mount(const char *diskname)
 {
 	/* Mount disk */
@@ -108,13 +98,13 @@ int fs_mount(const char *diskname)
 	//print_superblock();
 
 	// Read in root directory
-	if (block_read(superblock.indexOfRootDir, &root_dir) < 0) {
+	if (block_read(superblock.rdir_blk, &root_dir) < 0) {
 		fs_error("Couldn't read root directory");
 		return -1;
 	}
 
 	// Iterate through FAT blocks
-	for (int i = 0; i < superblock.numOfFatBlocks; ++i) {
+	for (int i = 0; i < superblock.fat_blk_count; ++i) {
 		// Read FAT block into entry address
 		if (block_read(i + 1, &(FAT[i * FS_FAT_ENTRY_MAX_COUNT])) < 0) {
 			fs_error("Couldn't read FAT");
@@ -130,7 +120,7 @@ int fs_mount(const char *diskname)
 	}
 
 	// Check disk size
-	if (superblock.totalNumOfBlocks != block_disk_count()) {
+	if (superblock.total_blk_count != block_disk_count()) {
 		fs_error("Mismatched number of blocks");
 		return -1;
 	}
@@ -146,8 +136,30 @@ int fs_umount(void)
 
 int fs_info(void)
 {
-	fprint(stdout, "FS Info:\n");
-	fprint(stdout, "total_blk_count:\n");
+	// Root Directory Traversal
+	int free_file_count = FS_FILE_MAX_COUNT;
+	for (int i = 0; i < FS_FILE_MAX_COUNT; ++i) {
+		if (root_dir.file[i].file_name[0] == '\0')
+			continue;
+		free_file_count--;
+	}
+
+	// FAT Traversal
+	int free_data_blk_count = superblock.data_blk_count;
+	for (int i = 0; i < superblock.data_blk_count; ++i) {
+		if (FAT[i].entry == '\0')
+			continue;
+		free_data_blk_count--;
+	}
+
+	fprintf(stdout, "FS Info:\n");
+	fprintf(stdout, "total_blk_count=%d\n",		superblock.total_blk_count);
+	fprintf(stdout, "fat_blk_count=%d\n",		superblock.fat_blk_count);
+	fprintf(stdout, "rdir_blk=%d\n",		superblock.rdir_blk);
+	fprintf(stdout, "data_blk=%d\n",		superblock.data_blk);
+	fprintf(stdout, "data_blk_count=%d\n",		superblock.data_blk_count);
+	fprintf(stdout, "fat_free_ratio=%d/%d\n",	free_data_blk_count,	superblock.data_blk_count); // Not functional yet
+	fprintf(stdout, "rdir_free_ratio=%d/%d\n",	free_file_count,	FS_FILE_MAX_COUNT);
 
 	return 0;
 }
