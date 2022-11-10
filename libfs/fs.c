@@ -31,12 +31,12 @@
 * 0x11		4079		Unused/Padding
 */
 struct superblock {
-	uint64_t sig;		// signature: ECS150FS 
-	uint16_t totalNumOfBlocks;	// Total amount of blocks of virtual disk
-	uint16_t indexOfRootDir;	// Root directory block index
-	uint16_t indexOfDataBlocks;	// Data block start index
-	uint16_t numOfDataBlocks;	// Data block start index
-	uint8_t  numOfFatBlocks;	// Number of blocks for FAT
+	uint64_t sig;			// signature: ECS150FS 
+	uint16_t total_blk_count;	// Total amount of blocks of virtual disk
+	uint16_t rdir_blk;		// Root directory block index
+	uint16_t data_blk;		// Data block start index
+	uint16_t data_blk_count;	// Data block start index
+	uint8_t  fat_blk_count;		// Number of blocks for FAT
 	uint8_t  unused[4079];		// Padding
 }__attribute__((packed));
 
@@ -65,9 +65,9 @@ struct FAT_entry {
 * 0x16		10		Unused/Padding
 */
 struct file_entry {
-	uint8_t  fileName[FS_FILENAME_LEN];
-	uint32_t fileSize;		// Length 4 bytes file size
-	uint16_t indexOfDataBlock;	// Index of the first data block
+	uint8_t  file_name[FS_FILENAME_LEN];
+	uint32_t file_size;		// Length 4 bytes file size
+	uint16_t data_blk;	// Index of the first data block
 	uint8_t  unused[10];
 } __attribute__((packed));
 
@@ -146,7 +146,9 @@ int fs_umount(void)
 
 int fs_info(void)
 {
-	/* TODO: Phase 1 */
+	fprint(stdout, "FS Info:\n");
+	fprint(stdout, "total_blk_count:\n");
+
 	return 0;
 }
 
