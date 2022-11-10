@@ -15,10 +15,9 @@
 #define FS_FAT_ENTRY_MAX_COUNT 2048
 
 /* Global Variables*/
-// These are pointers to the byte addresses within the disk file
-struct superblock* superblock;
-struct FATEntry* FAT[];
-struct rootDir* root_dir;
+struct superblock superblock;
+struct FATEntry* FAT;		// Array of uint16_t objects
+struct rootDir root_dir;
 
 /* Data Structures */
 
@@ -38,12 +37,10 @@ struct rootDir* root_dir;
 */
 struct superblock {
 	uint8_t sig[8];			// signature: ECS150FS 
-
 	uint16_t totalNumOfBlocks;	// Total amount of blocks of virtual disk
 	uint16_t indexOfRootDir;	// Root directory block index
 	uint16_t indexOfDataBlocks;	// Data block start index
 	uint16_t numOfDataBlocks;	// Data block start index
-
 	uint8_t  numOfFatBlocks;	// Number of blocks for FAT
 	uint8_t  unused[4079];		// Padding
 }__attribute__((__packed__));
@@ -74,7 +71,6 @@ struct FATEntry {
 */
 struct fileEntry {
 	uint8_t fileName[FS_FILENAME_LEN];
-
 	uint32_t fileSize;		// Length 4 bytes file size
 	uint16_t  indexOfDataBlock;	// Index of the first data block
 	uint8_t  unused[10];
@@ -84,7 +80,6 @@ struct rootDir {
 	struct fileEntry file[FS_FILE_MAX_COUNT]; // Each file entry has the above layout, which will be defined later
 }__attribute__((__packed__));
 
-/* Filesystem Functions */
 int fs_mount(const char *diskname)
 {
 	/* Mount disk */
@@ -96,22 +91,22 @@ int fs_mount(const char *diskname)
 	}
 
 	// Read in superblock
-	if (block_read(0, superblock) < 0) {
+	if (block_read(0, &superblock) < 0) {
 		fs_error("Couldn't read superblock");
 		return -1;
 	}
 
 	// Read in root directory
-	if (block_read(superblock->indexOfRootDir, root_dir) < 0) {
+	if (block_read(superblock.indexOfRootDir, &root_dir) < 0) {
 		fs_error("Couldn't read root directory");
 		return -1;
 	}
 
 	// Iterate through FAT blocks
-	FAT = malloc(superblock->numOfDataBlocks * sizeof(uint16_t));
-	for (int i = 0; i < superblock->numOfFatBlocks; ++i) {
+	FAT = malloc(superblock.numOfDataBlocks * sizeof(uint16_t));
+	for (int i = 0; i < superblock.numOfFatBlocks; ++i) {
 		// Read FAT block into entry address
-		if (block_read(i + 1, FAT[i * FS_FAT_ENTRY_MAX_COUNT]) < 0) {
+		if (block_read(i + 1, &FAT[i * FS_FAT_ENTRY_MAX_COUNT]) < 0) {
 			fs_error("Couldn't read FAT");
 			return -1;
 		}
@@ -120,13 +115,13 @@ int fs_mount(const char *diskname)
 	/* Error checking */
 
 	// Check signature
-	if (strcmp(superblock->sig, "ECS150FS") != 0) {
+	if (strcmp((char*)superblock.sig, "ECS150FS") != 0) {
 		fs_error("Filesystem has an invalid format");
 		return -1;
 	}
 
 	// Check disk size
-	if (superblock->totalNumOfBlocks != block_disk_count()) {
+	if (superblock.totalNumOfBlocks != block_disk_count()) {
 		fs_error("Mismatched number of blocks");
 		return -1;
 	}
