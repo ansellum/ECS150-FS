@@ -12,10 +12,13 @@
 
 #define UNUSED(x) (void)(x)
 
+#define FS_FAT_ENTRY_MAX_COUNT 2048
+
 /* Global Variables*/
-struct superblock superblock;
-struct FAT FAT;
-struct rootDir root_dir;
+// These are pointers to the byte addresses within the disk file
+struct superblock* superblock;
+struct FATEntry* FAT[];
+struct rootDir* root_dir;
 
 /* Data Structures */
 
@@ -54,10 +57,9 @@ struct superblock {
 * FAT index:	0	1	2	3	4	5	6	7	8	9	10	…
 * Content:	0xFFFF	8	3	4	5	6	0xFFFF	0	0xFFFF	0	0	…
 */
-struct FAT {
-	uint16_t* entry; // 16-bit entries; # of entries determined at runtime
+struct FATEntry {
+	uint16_t entry;
 }__attribute__((__packed__));
-
 
 /*
 * The root directory is an array of 128 entries stored in the block following the FAT. 
@@ -70,8 +72,16 @@ struct FAT {
 * 0x14		2		Index of the first data block
 * 0x16		10		Unused/Padding
 */
+struct fileEntry {
+	char fileName[FS_FILENAME_LEN];
+
+	uint32_t fileSize;         // Length 4 bytes file size
+	uint8_t  indexOfDataBlock; // Index of the first data block
+	uint8_t  unused[10];
+} __attribute__((__packed__));
+
 struct rootDir {
-	uint32_t file[FS_FILE_MAX_COUNT]; // Each file entry has the above layout, which will be defined later
+	struct fileEntry file[FS_FILE_MAX_COUNT]; // Each file entry has the above layout, which will be defined later
 }__attribute__((__packed__));
 
 /* Filesystem Functions */
@@ -81,26 +91,42 @@ int fs_mount(const char *diskname)
 
 	// Open file
 	if (block_disk_open(diskname) < 0) {
-		perror("block_disk_open");
+		fs_error("Couldn't open disk");
 		return -1;
 	}
 
 	// Read in superblock
-	if (block_read(0, &superblock) < 0) {
-		perror("block_read");
+	if (block_read(0, superblock) < 0) {
+		fs_error("Couldn't read superblock");
+		return -1;
+	}
+
+	// Iterate through FAT blocks
+	FAT = malloc(superblock->numOfDataBlocks * sizeof(uint16_t));
+	for (int i = 0; i < superblock->numOfFatBlocks; ++i) {
+		// Read FAT block into entry address
+		if (block_read(i + 1, FAT[i * FS_FAT_ENTRY_MAX_COUNT]) < 0) {
+			fs_error("Couldn't read FAT");
+			return -1;
+		}
+	}
+
+	// Read in root directory
+	if (block_read(superblock->indexOfRootDir, root_dir) < 0) {
+		fs_error("Couldn't read root directory");
 		return -1;
 	}
 
 	/* Error checking */
 
 	// Check signature
-	if (strcmp(superblock.sig, "ECS150FS") != 0) {
+	if (strcmp(superblock->sig, "ECS150FS") != 0) {
 		fs_error("Filesystem has an invalid format");
 		return -1;
 	}
 
 	// Check disk size
-	if (superblock.totalNumOfBlocks != block_disk_count()) {
+	if (superblock->totalNumOfBlocks != block_disk_count()) {
 		fs_error("Mismatched number of blocks");
 		return -1;
 	}
