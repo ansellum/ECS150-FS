@@ -101,6 +101,12 @@ int fs_mount(const char *diskname)
 		return -1;
 	}
 
+	// Read in root directory
+	if (block_read(superblock->indexOfRootDir, root_dir) < 0) {
+		fs_error("Couldn't read root directory");
+		return -1;
+	}
+
 	// Iterate through FAT blocks
 	FAT = malloc(superblock->numOfDataBlocks * sizeof(uint16_t));
 	for (int i = 0; i < superblock->numOfFatBlocks; ++i) {
@@ -109,12 +115,6 @@ int fs_mount(const char *diskname)
 			fs_error("Couldn't read FAT");
 			return -1;
 		}
-	}
-
-	// Read in root directory
-	if (block_read(superblock->indexOfRootDir, root_dir) < 0) {
-		fs_error("Couldn't read root directory");
-		return -1;
 	}
 
 	/* Error checking */
