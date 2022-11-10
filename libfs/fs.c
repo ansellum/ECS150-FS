@@ -10,6 +10,8 @@
 #define fs_error(fmt, ...) \
 	fprintf(stderr, "%s: "fmt"\n", __func__, ##__VA_ARGS__)
 
+#define UNUSED(x) (void)(x)
+
 /* Global Variables*/
 struct superblock superblock;
 struct FAT FAT;
@@ -102,60 +104,86 @@ int fs_mount(const char *diskname)
 		fs_error("Mismatched number of blocks");
 		return -1;
 	}
+
+	return 0;
 }
 
 int fs_umount(void)
 {
 	/* TODO: Phase 1 */
+	return 0;
 }
 
 int fs_info(void)
 {
 	/* TODO: Phase 1 */
+	return 0;
 }
 
 int fs_create(const char *filename)
 {
+	UNUSED(filename);
 	/* TODO: Phase 2 */
+	return 0;
 }
 
 int fs_delete(const char *filename)
 {
+	UNUSED(filename);
 	/* TODO: Phase 2 */
+	return 0;
 }
 
 int fs_ls(void)
 {
 	/* TODO: Phase 2 */
+	return 0;
 }
 
 int fs_open(const char *filename)
 {
+	UNUSED(filename);
 	/* TODO: Phase 3 */
+	return 0;
 }
 
 int fs_close(int fd)
 {
+	UNUSED(fd);
 	/* TODO: Phase 3 */
+	return 0;
 }
 
 int fs_stat(int fd)
 {
+	UNUSED(fd);
 	/* TODO: Phase 3 */
+	return 0;
 }
 
 int fs_lseek(int fd, size_t offset)
 {
+	UNUSED(fd);
+	UNUSED(offset);
 	/* TODO: Phase 3 */
+	return 0;
 }
 
 int fs_write(int fd, void *buf, size_t count)
 {
+	UNUSED(fd);
+	UNUSED(buf);
+	UNUSED(count);
 	/* TODO: Phase 4 */
+	return 0;
 }
 
 int fs_read(int fd, void *buf, size_t count)
 {
+	UNUSED(fd);
+	UNUSED(buf);
+	UNUSED(count);
 	/* TODO: Phase 4 */
+	return 0;
 }
 
