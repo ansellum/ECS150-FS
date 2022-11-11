@@ -13,7 +13,7 @@
 #define UNUSED(x) (void)(x)
 
 #define FS_FAT_ENTRY_MAX_COUNT (BLOCK_SIZE/2)
-#define SIGNATURE 0x5346303531534345	// ECS150 in little-endian
+#define SIGNATURE 0x5346303531534345	// 'ECS150FS' in little-endian
 
 /* Data Structures */
 /* 
@@ -95,7 +95,6 @@ int fs_mount(const char *diskname)
 		fs_error("Couldn't read superblock");
 		return -1;
 	}
-	//print_superblock();
 
 	// Read in root directory
 	if (block_read(superblock.rdir_blk, &root_dir) < 0) {
@@ -105,7 +104,7 @@ int fs_mount(const char *diskname)
 
 	// Read FAT by iterating at a block-level
 	for (int i = 0; i < superblock.fat_blk_count; ++i) {
-		// Read FAT block into entry address
+		// Find the correct FAT block & pass the corresponding entry address as the buffer
 		if (block_read(i + 1, &(FAT.entry[i * FS_FAT_ENTRY_MAX_COUNT])) < 0) {
 			fs_error("Couldn't read FAT");
 			return -1;
@@ -121,7 +120,7 @@ int fs_mount(const char *diskname)
 
 	// Check disk size
 	if (superblock.total_blk_count != block_disk_count()) {
-		fs_error("Mismatched number of blocks");
+		fs_error("Mismatched number of total blocks");
 		return -1;
 	}
 
@@ -130,7 +129,25 @@ int fs_mount(const char *diskname)
 
 int fs_umount(void)
 {
-	/* TODO: Phase 1 */
+	/* Write back blocks */
+	// Root Directory
+	if (block_write(superblock.rdir_blk, &root_dir) < 0) {
+		fs_error("Couldn't write over root directory");
+		return -1;
+	}
+
+	// FAT
+	for (int i = 0; i < superblock.fat_blk_count; ++i) {
+		// Find the correct FAT block & pass the corresponding entry address as the buffer
+		if (block_write(i + 1, &(FAT.entry[i * FS_FAT_ENTRY_MAX_COUNT])) < 0) {
+			fs_error("Couldn't write over FAT");
+			return -1;
+		}
+	}
+
+	// Also write back data blocks???
+	// Could be done w/ block_write within fs_create/fs_write
+
 	return 0;
 }
 
