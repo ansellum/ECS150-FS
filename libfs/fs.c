@@ -9,11 +9,11 @@
 
 #define fs_error(fmt, ...) \
 	fprintf(stderr, "%s: "fmt"\n", __func__, ##__VA_ARGS__)
-
 #define UNUSED(x) (void)(x)
 
 #define FS_FAT_ENTRY_MAX_COUNT (BLOCK_SIZE/2)
 #define SIGNATURE 0x5346303531534345	// 'ECS150FS' in little-endian
+#define FAT_EOC 0xFFFF
 
 /* Data Structures */
 /* 
@@ -146,7 +146,7 @@ int fs_umount(void)
 	}
 
 	// Also write back data blocks???
-	// Could be done w/ block_write within fs_create/fs_write
+	// Could be done w/ block_write within fs_write
 
 	return 0;
 }
@@ -212,7 +212,7 @@ int fs_create(const char *filename)
 			break;
 
 		// Check if file already exists
-		if (strcmp(filename, (char*)root_dir.file[free_entry_index].file_name) == 0) {
+		if (strcmp(filename, (char*) root_dir.file[free_entry_index].file_name) == 0) {
 			fs_error("File already exists");
 			return -1;
 		}
@@ -225,7 +225,9 @@ int fs_create(const char *filename)
 	}
 
 	/* Create file */
-
+	strcpy((char*)root_dir.file[free_entry_index].file_name, filename);
+	root_dir.file[free_entry_index].file_size = 0;
+	//root_dir.file[free_entry_index].data_blk = ???;
 
 	return 0;
 }
