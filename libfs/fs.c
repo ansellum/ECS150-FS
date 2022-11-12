@@ -7,12 +7,15 @@
 #include "disk.h"
 #include "fs.h"
 
-#define fs_error(fmt, ...) \
-	fprintf(stderr, "%s: "fmt"\n", __func__, ##__VA_ARGS__)
-
-#define error(...)				\
+#define fs_error(...)				\
 {							\
-	fs_error(__VA_ARGS__);	\
+	fprintf(stderr, "%s: "fmt"\n", __func__, ##__VA_ARGS__)	\
+	return -1;					\
+}
+
+#define fs_perror(...)				\
+{							\
+	perror(__VA_ARGS__);	\
 	return -1;					\
 }
 
@@ -86,6 +89,7 @@ struct root_dir {
 struct superblock superblock;
 struct FAT FAT; // Maximum of 4 FAT blocks, 2048 entires each
 struct root_dir root_dir;
+uint8_t open_fd = FS_OPEN_MAX_COUNT;
 
 /* Filesystem Functions */
 int fs_mount(const char *diskname)
@@ -93,31 +97,31 @@ int fs_mount(const char *diskname)
 	/* Mount disk */
 	// Open file
 	if (block_disk_open(diskname) < 0)
-		error("Couldn't open disk");
+		fs_error("Couldn't open disk");
 
 	// Read in superblock
 	if (block_read(0, &superblock) < 0)
-		error("Couldn't read superblock");
+		fs_error("Couldn't read superblock");
 
 	// Read in root directory
 	if (block_read(superblock.rdir_blk, &root_dir) < 0)
-		error("Couldn't read root directory");
+		fs_error("Couldn't read root directory");
 
 	// Read FAT by iterating at a block-level
 	for (int i = 0; i < superblock.fat_blk_count; ++i) {
 		// Find the correct FAT block & pass the corresponding entry address as the buffer
 		if (block_read(i + 1, &(FAT.entry[i * FS_FAT_ENTRY_MAX_COUNT])) < 0)
-			error("Couldn't read FAT")
+			fs_error("Couldn't read FAT")
 	}
 
 	/* Error checking */
 	// Check signature
 	if (superblock.sig != SIGNATURE)
-		error("Filesystem has an invalid format");
+		fs_error("Filesystem has an invalid format");
 
 	// Check disk size
 	if (superblock.total_blk_count != block_disk_count())
-		error("Mismatched number of total blocks");
+		fs_error("Mismatched number of total blocks");
 
 	return 0;
 }
@@ -127,13 +131,13 @@ int fs_umount(void)
 	/* Write back blocks */
 	// Root Directory
 	if (block_write(superblock.rdir_blk, &root_dir) < 0)
-		error("Couldn't write over root directory");
+		fs_error("Couldn't write over root directory");
 
 	// FAT
 	for (int i = 0; i < superblock.fat_blk_count; ++i) {
 		// Find the correct FAT block & pass the corresponding entry address as the buffer
 		if (block_write(i + 1, &(FAT.entry[i * FS_FAT_ENTRY_MAX_COUNT])) < 0)
-			error("Couldn't write over FAT");
+			fs_error("Couldn't write over FAT");
 	}
 
 	/* Empty all structs */
@@ -182,15 +186,15 @@ int fs_create(const char *filename)
 	/* Error Checking */
 	// Check if FS is mounted
 	if (superblock.sig != SIGNATURE)
-		error("Filesystem not mounted");
+		fs_error("Filesystem not mounted");
 
 	//Check if filename is NULL or empty
 	if (filename == NULL || filename[0] == '\0')
-		error("Filename is invalid (either NULL or empty)");
+		fs_error("Filename is invalid (either NULL or empty)");
 
 	// Check filename length (strlen doesn't count NULL, therefore use >=)
 	if (strlen(filename) >= FS_FILENAME_LEN)
-		error("Filename must be less than 16 characters");
+		fs_error("Filename must be less than 16 characters");
 
 	/* Find empty root entry */
 	int free_index = 0;
@@ -201,12 +205,12 @@ int fs_create(const char *filename)
 
 		// Check if file already exists
 		if (strcmp(filename, (char*) root_dir.file[free_index].file_name) == 0)
-			error("File already exists");
+			fs_error("File already exists");
 	}
 
 	// Check root directory capacity
 	if (free_index == FS_FILE_MAX_COUNT)
-		error("Filesystem is full");
+		fs_error("Filesystem is full");
 
 	/* Create file */
 	strcpy((char*)root_dir.file[free_index].file_name, filename);
@@ -221,11 +225,11 @@ int fs_delete(const char *filename)
 	/* Error Checking */
 	// Check if FS is mounted
 	if (superblock.sig != SIGNATURE)
-		error("Filesystem not mounted");
+		fs_error("Filesystem not mounted");
 
 	//Check if filename is NULL or empty
 	if (filename == NULL || filename[0] == '\0')
-		error("Filename is invalid (either NULL or empty)");
+		fs_error("Filename is invalid (either NULL or empty)");
 
 	/* TODO: CHECK IF FILE IS OPEN */
 
@@ -239,7 +243,7 @@ int fs_delete(const char *filename)
 		
 	// Check if file was found
 	if (death_index == FS_FILE_MAX_COUNT)
-		error("File not found");
+		fs_error("File not found");
 
 	/* Delete File */
 	root_dir.file[death_index].file_name[0] = '\0';
@@ -252,7 +256,7 @@ int fs_ls(void)
 	/* Error Checking */
 	// Check if FS is mounted
 	if (superblock.sig != SIGNATURE)
-		error("Filesystem not mounted");
+		fs_error("Filesystem not mounted");
 
 	/* List files */
 	fprintf(stdout, "FS Ls:\n");
@@ -270,23 +274,58 @@ int fs_ls(void)
 
 int fs_open(const char *filename)
 {
-	UNUSED(filename);
-	/* TODO: Phase 3 */
-	return 0;
+	int fd;
+
+	/* Error Checking */
+	// Check if FS is mounted
+	if (superblock.sig != SIGNATURE)
+		fs_error("Filesystem not mounted");
+
+	// Check if filename is NULL or empty
+	if (filename == NULL || filename[0] == '\0')
+		fs_error("Filename is invalid (either NULL or empty)");
+
+	// Check if the maximum for open files has been reached
+	if (open_fd == 0)
+		fs_error("Too many files are currently open");
+
+	/* Open File */
+	if ((fd = open(filename, O_RDWR)) < 0)
+		fs_error("File does not exist");
+
+	open_fd--;
+	return fd;
 }
 
 int fs_close(int fd)
 {
-	UNUSED(fd);
-	/* TODO: Phase 3 */
+	/* Error Checking */
+	// Check if FS is mounted
+	if (superblock.sig != SIGNATURE)
+		fs_error("Filesystem not mounted");
+
+	if (close(fd) < 0)
+		fs_error("File descriptor is invalid");
+
 	return 0;
 }
 
 int fs_stat(int fd)
 {
-	UNUSED(fd);
-	/* TODO: Phase 3 */
-	return 0;
+	struct stat* info;
+
+	/* Error Checking */
+	// Check if FS is mounted
+	if (superblock.sig != SIGNATURE)
+		fs_error("Filesystem not mounted");
+
+	if (stat(fd, info) < 0)
+		fs_error("File descriptor is invalid");
+
+	if ((info = malloc(sizeof(struct stat))) < 0)
+		fs_perror("malloc");
+		
+	return info->st_size;
 }
 
 int fs_lseek(int fd, size_t offset)
