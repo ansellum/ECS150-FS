@@ -183,8 +183,6 @@ int fs_info(void)
 
 int fs_create(const char *filename)
 {
-	UNUSED(filename);
-
 	/* Error Checking */
 	// Check if FS is mounted
 	if (superblock.sig != SIGNATURE) {
@@ -205,37 +203,66 @@ int fs_create(const char *filename)
 	}
 
 	/* Find empty root entry */
-	int free_entry_index = 0;
-	for (; free_entry_index < FS_FILE_MAX_COUNT; free_entry_index++) {
+	int free_index = 0;
+	for (; free_index < FS_FILE_MAX_COUNT; free_index++) {
 		// Break loop if empty entry is found
-		if (root_dir.file[free_entry_index].file_name[0] == '\0')
+		if (root_dir.file[free_index].file_name[0] == '\0')
 			break;
 
 		// Check if file already exists
-		if (strcmp(filename, (char*) root_dir.file[free_entry_index].file_name) == 0) {
+		if (strcmp(filename, (char*) root_dir.file[free_index].file_name) == 0) {
 			fs_error("File already exists");
 			return -1;
 		}
 	}
 
 	// Check root directory capacity
-	if (free_entry_index == FS_FILE_MAX_COUNT) {
+	if (free_index == FS_FILE_MAX_COUNT) {
 		fs_error("Filesystem is full");
 		return -1;
 	}
 
 	/* Create file */
-	strcpy((char*)root_dir.file[free_entry_index].file_name, filename);
-	root_dir.file[free_entry_index].file_size = 0;
-	//root_dir.file[free_entry_index].data_blk = ???;
+	strcpy((char*)root_dir.file[free_index].file_name, filename);
+	root_dir.file[free_index].file_size = 0;
+	root_dir.file[free_index].data_blk = FAT_EOC;
 
 	return 0;
 }
 
 int fs_delete(const char *filename)
 {
-	UNUSED(filename);
-	/* TODO: Phase 2 */
+	/* Error Checking */
+	// Check if FS is mounted
+	if (superblock.sig != SIGNATURE) {
+		fs_error("Filesystem not mounted");
+		return -1;
+	}
+
+	//Check if filename is NULL or empty
+	if (filename == NULL || filename[0] == '\0') {
+		fs_error("Filename is invalid (either NULL or empty)");
+		return -1;
+	}
+
+	/* TODO: CHECK IF FILE IS OPEN */
+
+	/* Find File in Root Directory */
+	int death_index = 0;
+	for (; death_index < FS_FILE_MAX_COUNT; death_index++)
+		// Break loop if entry is found
+		if (strcmp((char*)root_dir.file[death_index].file_name, filename) == 0)
+			break;
+
+	// Check if file was found
+	if (death_index == FS_FILE_MAX_COUNT) {
+		fs_error("File not found");
+		return -1;
+	}
+
+	/* Delete File */
+	root_dir.file[death_index].file_name[0] = '\0';
+
 	return 0;
 }
 
