@@ -184,7 +184,49 @@ int fs_info(void)
 int fs_create(const char *filename)
 {
 	UNUSED(filename);
-	/* TODO: Phase 2 */
+
+	/* Error Checking */
+	// Check if FS is mounted
+	if (superblock.sig != SIGNATURE) {
+		fs_error("Filesystem not mounted");
+		return -1;
+	}
+
+	//Check if filename is NULL or empty
+	if (filename == NULL || filename[0] == '\0') {
+		fs_error("Filename is invalid (either NULL or empty)");
+		return -1;
+	}
+
+	// Check filename length
+	if (strlen(filename) >= FS_FILENAME_LEN) { // strlen doesn't count NULL, therefore use >=
+		fs_error("Filename must be less than 16 characters");
+		return -1;
+	}
+
+	/* Find empty root entry */
+	int free_entry_index = 0;
+	for (; free_entry_index < FS_FILE_MAX_COUNT; free_entry_index++) {
+		// Break loop if empty entry is found
+		if (root_dir.file[free_entry_index].file_name[0] == '\0')
+			break;
+
+		// Check if file already exists
+		if (strcmp(filename, (char*)root_dir.file[free_entry_index].file_name) == 0) {
+			fs_error("File already exists");
+			return -1;
+		}
+	}
+
+	// Check root directory capacity
+	if (free_entry_index == FS_FILE_MAX_COUNT) {
+		fs_error("Filesystem is full");
+		return -1;
+	}
+
+	/* Create file */
+
+
 	return 0;
 }
 
