@@ -330,9 +330,17 @@ int fs_stat(int fd)
 
 int fs_lseek(int fd, size_t offset)
 {
-	UNUSED(fd);
-	UNUSED(offset);
-	/* TODO: Phase 3 */
+	// Fetches file size AND does error checks
+	int file_size = fs_stat(fd);
+	if (file_size < 0)
+		fs_error("fs_stat");
+
+	if (file_size < offset)
+		fs_error("Requested offset surpasses file size boundaries");
+
+	if (lseek(fd, offset, SEEK_SET) < 0)
+		fs_perror("lseek");
+
 	return 0;
 }
 
