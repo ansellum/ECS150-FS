@@ -231,11 +231,12 @@ int fs_delete(const char *filename)
 
 	/* Find File in Root Directory */
 	int death_index = 0;
-	for (; death_index < FS_FILE_MAX_COUNT; death_index++)
+	for (; death_index < FS_FILE_MAX_COUNT; death_index++) {
 		// Break loop if entry is found
 		if (strcmp((char*)root_dir.file[death_index].file_name, filename) == 0)
 			break;
-
+	}
+		
 	// Check if file was found
 	if (death_index == FS_FILE_MAX_COUNT)
 		error("File not found");
@@ -248,7 +249,22 @@ int fs_delete(const char *filename)
 
 int fs_ls(void)
 {
-	/* TODO: Phase 2 */
+	/* Error Checking */
+	// Check if FS is mounted
+	if (superblock.sig != SIGNATURE)
+		error("Filesystem not mounted");
+
+	/* List files */
+	fprintf(stdout, "FS Ls:\n");
+	for (int index = 0; index < FS_FILE_MAX_COUNT; index++) {
+		//Skip index if empty
+		if (root_dir.file[index].file_name[0] == '\0')
+			continue;
+
+		fprintf(stdout, "file: %s, size: %d, data_blk: %d\n", 
+			root_dir.file[index].file_name, root_dir.file[index].file_size, root_dir.file[index].data_blk);
+	}
+
 	return 0;
 }
 
