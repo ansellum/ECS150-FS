@@ -1,15 +1,20 @@
-#include <assert.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "disk.h"
 #include "fs.h"
 
+#define error(fmt, ...) \
+	fprintf(stderr, "%s: "fmt"\n", __func__, ##__VA_ARGS__)
+
 #define fs_error(...)				\
 {							\
-	fprintf(stderr, "%s: "fmt"\n", __func__, ##__VA_ARGS__)	\
+	error(__VA_ARGS__);	\
 	return -1;					\
 }
 
@@ -312,20 +317,22 @@ int fs_close(int fd)
 
 int fs_stat(int fd)
 {
-	struct stat* info;
+	struct stat* buf;
+	int size;
 
 	/* Error Checking */
 	// Check if FS is mounted
 	if (superblock.sig != SIGNATURE)
 		fs_error("Filesystem not mounted");
 
-	if (stat(fd, info) < 0)
+	buf = malloc(sizeof(struct stat));
+	if (fstat(fd, buf) < 0)
 		fs_error("File descriptor is invalid");
 
-	if ((info = malloc(sizeof(struct stat))) < 0)
-		fs_perror("malloc");
+	size = buf->st_size;
+	free(buf);
 		
-	return info->st_size;
+	return size;
 }
 
 int fs_lseek(int fd, size_t offset)
@@ -335,7 +342,7 @@ int fs_lseek(int fd, size_t offset)
 	if (file_size < 0)
 		fs_error("fs_stat");
 
-	if (file_size < offset)
+	if ((size_t)file_size < offset)
 		fs_error("Requested offset surpasses file size boundaries");
 
 	if (lseek(fd, offset, SEEK_SET) < 0)
