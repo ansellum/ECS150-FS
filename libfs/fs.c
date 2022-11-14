@@ -31,17 +31,6 @@
 #define FAT_EOC 0xFFFF
 
 /* Data Structures */
-/*
-* A file descriptor is obtained using fs_open() and can support multiple operations (reading, writing, changing the file offset, etc).
-* The library must support a maximum of 32 file descriptors that can be open simultaneously.
-* A file descriptor is associated to a file and also contains a file offset.
-*/
-typedef struct file_descriptor {
-	uint8_t  fd;
-	uint8_t  offset;
-	uint32_t file_size;		// Length 4 bytes file size
-	uint8_t  file_name[FS_FILENAME_LEN];
-}fs_fd;
 
 /*
 * The superblock is the first block of the file system.
@@ -298,7 +287,6 @@ int fs_open(const char *filename)
 	/* Open the file */
 
 
-
 	open_fd--;
 	return fd;
 }
@@ -311,8 +299,6 @@ int fs_close(int fd)
 		fs_error("Filesystem not mounted");
 
 	/* Close the file */
-	//if (close(fd) < 0)
-		//fs_error("File descriptor is invalid");
 
 	return 0;
 }
@@ -330,13 +316,7 @@ int fs_stat(int fd)
 	buf = malloc(sizeof(struct stat));
 
 	/* PERFORM STAT*/
-	//if (fstat(fd, buf) < 0)
-		//fs_error("File descriptor is invalid");
 
-	//size = buf->st_size;
-	//free(buf);
-		
-	//return size;
 	return 0;
 }
 
@@ -352,8 +332,6 @@ int fs_lseek(int fd, size_t offset)
 		fs_error("Requested offset surpasses file size boundaries");
 
 	/* PERFORM LSEEK */
-	//if (lseek(fd, offset, SEEK_SET) < 0)
-		//fs_perror("lseek");
 
 	return 0;
 }
