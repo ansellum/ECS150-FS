@@ -70,11 +70,21 @@ struct root_dir {
 	struct file_entry file[FS_FILE_MAX_COUNT]; // Each file entry has the above layout, which will be defined later
 }__attribute__((packed));
 
+/*
+* A file descriptor is obtained using fs_open() and can support multiple operations (reading, writing, changing the file offset, etc).
+* The library must support a maximum of 32 file descriptors that can be open simultaneously.
+* A file descriptor is associated to a file and also contains a file offset.
+*/
+struct file_descriptor {
+	struct file_entry* entry;
+	size_t  offset;
+};
+
 /* Global Variables*/
 struct superblock superblock;
 struct FAT FAT; // Maximum of 4 FAT blocks, 2048 entires each
 struct root_dir root_dir;
-uint8_t open_fd = FS_OPEN_MAX_COUNT;
+struct file_descriptor fd_list[FS_OPEN_MAX_COUNT];
 
 /* Filesystem Functions */
 int fs_mount(const char *diskname)
@@ -107,6 +117,12 @@ int fs_mount(const char *diskname)
 	// Check disk size
 	if (superblock.total_blk_count != block_disk_count())
 		fs_error("Mismatched number of total blocks");
+
+	/* Prepare file descriptors */
+	for (int i = 0; i < FS_OPEN_MAX_COUNT; ++i) {
+		fd_list[i].entry = NULL;
+		fd_list[i].offset = 0;
+	}
 
 	return 0;
 }
@@ -259,7 +275,7 @@ int fs_ls(void)
 
 int fs_open(const char *filename)
 {
-	int fd;
+
 
 	/* Error Checking */
 	// Check if FS is mounted
@@ -270,25 +286,29 @@ int fs_open(const char *filename)
 	if (filename == NULL || filename[0] == '\0')
 		fs_error("Filename is invalid (either NULL or empty)");
 
-	// Check if the maximum for open files has been reached
-	if (open_fd == 0)
-		fs_error("Too many files are currently open");
-
 	/* Find file in root directory */
-	int file_index = 0;
-	for (; file_index < FS_FILE_MAX_COUNT; file_index++) {
+	int file_root_index = 0;
+	for (; file_root_index < FS_FILE_MAX_COUNT; file_root_index++) {
 		// Break loop if empty entry is found
-		if (strcmp(root_dir.file[file_index].file_name, filename) == 0)
+		if (strcmp((char*)root_dir.file[file_root_index].file_name, filename) == 0)
 			break;
 	}
-	if (file_index == FS_FILE_MAX_COUNT)
+	if (file_root_index == FS_FILE_MAX_COUNT)
 		fs_error("No such file or directory");
 
-	/* Open the file */
+	/* Look for empty file descriptor */
+	int free_fd = 0;
+	for (; free_fd < FS_OPEN_MAX_COUNT; ++free_fd) {
+		if (fd_list[free_fd].entry == NULL)
+			break;
+	}
+	if (free_fd == FS_OPEN_MAX_COUNT)
+		fs_error("Too many files are currently open");
 
+	/* Assign file to fd */
+	fd_list[free_fd].entry = &(root_dir.file[file_root_index]);
 
-	open_fd--;
-	return fd;
+	return free_fd;
 }
 
 int fs_close(int fd)
@@ -298,26 +318,29 @@ int fs_close(int fd)
 	if (superblock.sig != SIGNATURE)
 		fs_error("Filesystem not mounted");
 
-	/* Close the file */
+	// Check if file descriptor is closed or out of bounds
+	if (fd_list[fd].entry == NULL || fd >= FS_OPEN_MAX_COUNT)
+		fs_error("Invalid file descriptor");
+
+	/* Close the file (i.e. reset file descriptor) */
+	fd_list[fd].entry = NULL;
+	fd_list[fd].offset = 0;
 
 	return 0;
 }
 
 int fs_stat(int fd)
 {
-	struct stat* buf;
-	int size;
-
 	/* Error Checking */
 	// Check if FS is mounted
 	if (superblock.sig != SIGNATURE)
 		fs_error("Filesystem not mounted");
 
-	buf = malloc(sizeof(struct stat));
+	// Check if file descriptor is open (i.e. not used) or out of bounds
+	if (fd_list[fd].entry == NULL || fd >= FS_OPEN_MAX_COUNT)
+		fs_error("Invalid file descriptor");
 
-	/* PERFORM STAT*/
-
-	return 0;
+	return fd_list[fd].entry->file_size;
 }
 
 int fs_lseek(int fd, size_t offset)
@@ -331,7 +354,8 @@ int fs_lseek(int fd, size_t offset)
 	if ((size_t)file_size < offset)
 		fs_error("Requested offset surpasses file size boundaries");
 
-	/* PERFORM LSEEK */
+	/* Perform lseek */
+	fd_list[fd].offset = offset;
 
 	return 0;
 }

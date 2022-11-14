@@ -2,4 +2,5 @@ MOUNT
 CREATE	file_fs
 OPEN	file_fs
 CLOSE	file_fs
+DELETE	file_fs
 UNMOUNT
