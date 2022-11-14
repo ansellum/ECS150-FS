@@ -1,0 +1,5 @@
+MOUNT
+CREATE	file_fs
+OPEN	file_fs
+CLOSE	file_fs
+UNMOUNT

@@ -1,0 +1,4 @@
+MOUNT
+CREATE	file_fs1
+CREATE	file_fs2
+UNMOUNT

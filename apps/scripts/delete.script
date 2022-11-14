@@ -1,0 +1,4 @@
+MOUNT
+DELETE	file_fs2
+DELETE	file_fs1
+UNMOUNT

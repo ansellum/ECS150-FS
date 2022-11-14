@@ -31,19 +31,21 @@
 #define FAT_EOC 0xFFFF
 
 /* Data Structures */
-/* 
+/*
+* A file descriptor is obtained using fs_open() and can support multiple operations (reading, writing, changing the file offset, etc).
+* The library must support a maximum of 32 file descriptors that can be open simultaneously.
+* A file descriptor is associated to a file and also contains a file offset.
+*/
+typedef struct file_descriptor {
+	uint8_t  fd;
+	uint8_t  offset;
+	uint32_t file_size;		// Length 4 bytes file size
+	uint8_t  file_name[FS_FILENAME_LEN];
+}fs_fd;
+
+/*
 * The superblock is the first block of the file system.
-* Its internal format is:
-*
-* Offset	Length (bytes)	Description
-* 
-* 0x00		8		Signature (must be equal to “ECS150FS”)
-* 0x08		2		Total amount of blocks of virtual disk
-* 0x0A		2		Root directory block index
-* 0x0C		2		Data block start index
-* 0x0E		2		Amount of data blocks
-* 0x10		1		Number of blocks for FAT
-* 0x11		4079		Unused/Padding
+* See HTML for format specifications.
 */
 struct superblock {
 	uint64_t sig;			// signature: ECS150FS 
@@ -56,28 +58,17 @@ struct superblock {
 }__attribute__((packed));
 
 /*
-* The FAT is a flat array, possibly spanning several blocks,
-* which entries are composed of 16-bit unsigned words.
-* There are as many entries as data blocks in the disk.
-* Each entry in the FAT is 16-bit wide.
-*
-* FAT index:	0	1	2	3	4	5	6	7	8	9	10	…
-* Content:	0xFFFF	8	3	4	5	6	0xFFFF	0	0xFFFF	0	0	…
+* The FAT is a flat array, possibly spanning several blocks, which entries are composed of 16-bit unsigned words.
+* Empty entries are marked by a '0'; non-zero entries are part of a chainmap representing the next block in the chainmap (linked lists?)
+* See HTML for format specifications.
 */
 struct FAT {
 	uint16_t entry[4 * FS_FAT_ENTRY_MAX_COUNT]; // Maximum of 8192 data blocks => Maximum of 4 FAT blocks
 }__attribute__((packed));
 
 /*
-* The root directory is an array of 128 entries stored in the block following the FAT. 
-* Each entry is 32-byte wide and describes a file, according to the following format:
-*
-* Offset	Length (bytes)	Description
-* 
-* 0x00		16		Filename (including NULL character)
-* 0x10		4		Size of the file (in bytes)
-* 0x14		2		Index of the first data block
-* 0x16		10		Unused/Padding
+* The root directory is an array of 128 entries that describe the filesystem's contained files.
+* See HTML for format specifications
 */
 struct file_entry {
 	uint8_t  file_name[FS_FILENAME_LEN];
@@ -294,9 +285,19 @@ int fs_open(const char *filename)
 	if (open_fd == 0)
 		fs_error("Too many files are currently open");
 
-	/* Open File */
-	if ((fd = open(filename, O_RDWR)) < 0)
-		fs_error("File does not exist");
+	/* Find file in root directory */
+	int file_index = 0;
+	for (; file_index < FS_FILE_MAX_COUNT; file_index++) {
+		// Break loop if empty entry is found
+		if (strcmp(root_dir.file[file_index].file_name, filename) == 0)
+			break;
+	}
+	if (file_index == FS_FILE_MAX_COUNT)
+		fs_error("No such file or directory");
+
+	/* Open the file */
+
+
 
 	open_fd--;
 	return fd;
@@ -309,8 +310,9 @@ int fs_close(int fd)
 	if (superblock.sig != SIGNATURE)
 		fs_error("Filesystem not mounted");
 
-	if (close(fd) < 0)
-		fs_error("File descriptor is invalid");
+	/* Close the file */
+	//if (close(fd) < 0)
+		//fs_error("File descriptor is invalid");
 
 	return 0;
 }
@@ -326,13 +328,16 @@ int fs_stat(int fd)
 		fs_error("Filesystem not mounted");
 
 	buf = malloc(sizeof(struct stat));
-	if (fstat(fd, buf) < 0)
-		fs_error("File descriptor is invalid");
 
-	size = buf->st_size;
-	free(buf);
+	/* PERFORM STAT*/
+	//if (fstat(fd, buf) < 0)
+		//fs_error("File descriptor is invalid");
+
+	//size = buf->st_size;
+	//free(buf);
 		
-	return size;
+	//return size;
+	return 0;
 }
 
 int fs_lseek(int fd, size_t offset)
@@ -342,11 +347,13 @@ int fs_lseek(int fd, size_t offset)
 	if (file_size < 0)
 		fs_error("fs_stat");
 
+	// Check if offset exceeds filesize
 	if ((size_t)file_size < offset)
 		fs_error("Requested offset surpasses file size boundaries");
 
-	if (lseek(fd, offset, SEEK_SET) < 0)
-		fs_perror("lseek");
+	/* PERFORM LSEEK */
+	//if (lseek(fd, offset, SEEK_SET) < 0)
+		//fs_perror("lseek");
 
 	return 0;
 }
