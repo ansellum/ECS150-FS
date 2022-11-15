@@ -32,7 +32,7 @@
 
 /* Data Structures */
 
-/*
+/**
 * The superblock is the first block of the file system.
 * See HTML doc for format specifications.
 */
@@ -46,7 +46,7 @@ struct superblock {
 	uint8_t  unused[4079];		// Padding
 }__attribute__((packed));
 
-/*
+/**
 * The FAT is a flat array, possibly spanning several blocks, which entries are composed of 16-bit unsigned words.
 * Empty entries are marked by a '0'; non-zero entries are part of a chainmap representing the next block in the chainmap (linked lists?)
 * See HTML doc for format specifications.
@@ -55,22 +55,31 @@ struct FAT {
 	uint16_t entry[4 * FS_FAT_ENTRY_MAX_COUNT]; // Maximum of 8192 data blocks => Maximum of 4 FAT blocks
 }__attribute__((packed));
 
-/*
+/**
 * The root directory is an array of 128 entries that describe the filesystem's contained files.
 * See HTML doc for format specifications
 */
-struct file_entry {
+struct file_entry { // 32B
 	uint8_t  file_name[FS_FILENAME_LEN];
 	uint32_t file_size;		// Length 4 bytes file size
-	uint16_t data_blk;	// Index of the first data block
+	uint16_t data_blk;		// Index of the first data block
 	uint8_t  unused[10];
-} __attribute__((packed));
+}__attribute__((packed));
 
 struct root_dir {
 	struct file_entry file[FS_FILE_MAX_COUNT]; // Each file entry has the above layout, which will be defined later
 }__attribute__((packed));
 
-/*
+/**
+* A data block is byte-addressable storage block with the capacity of 4096 bytes. This is mimicked by using an array of 
+* 4096 uint8_t's, making each byte readable.
+*/
+
+struct data_blk {
+	uint8_t byte[BLOCK_SIZE];
+};
+
+/**
 * A file descriptor is obtained using fs_open() and can support multiple operations (reading, writing, changing the file offset, etc).
 * The library must support a maximum of 32 file descriptors that can be open simultaneously.
 * A file descriptor is associated to a file and also contains a file offset.
@@ -84,6 +93,7 @@ struct file_descriptor {
 struct superblock superblock;
 struct FAT FAT; // Maximum of 4 FAT blocks, 2048 entires each
 struct root_dir root_dir;
+struct data_blk bounce;
 struct file_descriptor fd_list[FS_OPEN_MAX_COUNT];
 
 /* Filesystem Functions */
@@ -396,6 +406,25 @@ int fs_read(int fd, void *buf, size_t count)
 		fs_error("buf is NULL");
 
 	/* Begin Read */
+
+	// Get the first block of the file and read it into bounce buffer
+	if (block_write(fd_list[fd].entry->data_blk, bounce) < 0)
+		fs_error("block_write");
+
+	/* Perform read of certain section
+	* 
+	*  1. Use a for loop to copy the bytes from bounce to buf
+	*	- Use the offset member from struct file_descriptor to account for offset
+	*  2. End the loop if the end of the data block is reached
+	*  3. If end of data block has been reached, refer to FAT block for next node
+	*	- To do this, write a file using fs_ref.x and try to examine its FAT structure using bash od
+	*  4. Continue this process until count or EOF has been reached (break from loop?)
+	*/
+	while () {
+		for (;;) {
+
+		}
+	}
 
 	return 0;
 }
