@@ -34,7 +34,7 @@
 
 /*
 * The superblock is the first block of the file system.
-* See HTML for format specifications.
+* See HTML doc for format specifications.
 */
 struct superblock {
 	uint64_t sig;			// signature: ECS150FS 
@@ -49,7 +49,7 @@ struct superblock {
 /*
 * The FAT is a flat array, possibly spanning several blocks, which entries are composed of 16-bit unsigned words.
 * Empty entries are marked by a '0'; non-zero entries are part of a chainmap representing the next block in the chainmap (linked lists?)
-* See HTML for format specifications.
+* See HTML doc for format specifications.
 */
 struct FAT {
 	uint16_t entry[4 * FS_FAT_ENTRY_MAX_COUNT]; // Maximum of 8192 data blocks => Maximum of 4 FAT blocks
@@ -57,7 +57,7 @@ struct FAT {
 
 /*
 * The root directory is an array of 128 entries that describe the filesystem's contained files.
-* See HTML for format specifications
+* See HTML doc for format specifications
 */
 struct file_entry {
 	uint8_t  file_name[FS_FILENAME_LEN];
@@ -275,8 +275,6 @@ int fs_ls(void)
 
 int fs_open(const char *filename)
 {
-
-
 	/* Error Checking */
 	// Check if FS is mounted
 	if (superblock.sig != SIGNATURE)
@@ -362,19 +360,43 @@ int fs_lseek(int fd, size_t offset)
 
 int fs_write(int fd, void *buf, size_t count)
 {
-	UNUSED(fd);
-	UNUSED(buf);
 	UNUSED(count);
-	/* TODO: Phase 4 */
+
+	/* Error Checking */
+	// Check if FS is mounted
+	if (superblock.sig != SIGNATURE)
+		fs_error("Filesystem not mounted");
+
+	// Check if file descriptor is closed or out of bounds
+	if (fd_list[fd].entry == NULL || fd >= FS_OPEN_MAX_COUNT)
+		fs_error("Invalid file descriptor");
+
+	if (buf == NULL)
+		fs_error("buf is NULL");
+
+	/* Begin Write */
+
 	return 0;
 }
 
 int fs_read(int fd, void *buf, size_t count)
 {
-	UNUSED(fd);
-	UNUSED(buf);
 	UNUSED(count);
-	/* TODO: Phase 4 */
+
+	/* Error Checking */
+	// Check if FS is mounted
+	if (superblock.sig != SIGNATURE)
+		fs_error("Filesystem not mounted");
+
+	// Check if file descriptor is closed or out of bounds
+	if (fd_list[fd].entry == NULL || fd >= FS_OPEN_MAX_COUNT)
+		fs_error("Invalid file descriptor");
+
+	if (buf == NULL)
+		fs_error("buf is NULL");
+
+	/* Begin Read */
+
 	return 0;
 }
 
