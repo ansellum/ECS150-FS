@@ -48,12 +48,10 @@ struct superblock {
 
 /**
 * The FAT is a flat array, possibly spanning several blocks, which entries are composed of 16-bit unsigned words.
-* Empty entries are marked by a '0'; non-zero entries are part of a chainmap representing the next block in the chainmap (linked lists?)
+* Empty entries are marked by a '0'; non-zero entries are part of a chainmap representing the next block in the chainmap
 * See HTML doc for format specifications.
 */
-struct FAT {
-	uint16_t entry[4 * FS_FAT_ENTRY_MAX_COUNT]; // Maximum of 8192 data blocks => Maximum of 4 FAT blocks
-}__attribute__((packed));
+uint16_t FAT[4 * FS_FAT_ENTRY_MAX_COUNT]; // Maximum of 4 FAT blocks, 2048 entires each
 
 /**
 * The root directory is an array of 128 entries that describe the filesystem's contained files.
@@ -75,7 +73,7 @@ struct root_dir {
 * 4096 uint8_t's, making each byte readable.
 */
 
-struct data_blk {
+struct data_block {
 	uint8_t byte[BLOCK_SIZE];
 };
 
@@ -91,9 +89,8 @@ struct file_descriptor {
 
 /* Global Variables*/
 struct superblock superblock;
-struct FAT FAT; // Maximum of 4 FAT blocks, 2048 entires each
 struct root_dir root_dir;
-struct data_blk bounce;
+struct data_block bounce;
 struct file_descriptor fd_list[FS_OPEN_MAX_COUNT];
 
 /* Filesystem Functions */
@@ -115,7 +112,7 @@ int fs_mount(const char *diskname)
 	// Read FAT by iterating at a block-level
 	for (int i = 0; i < superblock.fat_blk_count; ++i) {
 		// Find the correct FAT block & pass the corresponding entry address as the buffer
-		if (block_read(i + 1, &(FAT.entry[i * FS_FAT_ENTRY_MAX_COUNT])) < 0)
+		if (block_read(i + 1, &(FAT[i * FS_FAT_ENTRY_MAX_COUNT])) < 0)
 			fs_error("Couldn't read FAT")
 	}
 
@@ -147,17 +144,14 @@ int fs_umount(void)
 	// FAT
 	for (int i = 0; i < superblock.fat_blk_count; ++i) {
 		// Find the correct FAT block & pass the corresponding entry address as the buffer
-		if (block_write(i + 1, &(FAT.entry[i * FS_FAT_ENTRY_MAX_COUNT])) < 0)
+		if (block_write(i + 1, &(FAT[i * FS_FAT_ENTRY_MAX_COUNT])) < 0)
 			fs_error("Couldn't write over FAT");
 	}
 
 	/* Empty all structs */
 	superblock = (const struct superblock){ 0 };
-	FAT = (const struct FAT){ 0 };
+	memset(FAT, 0, sizeof(FAT));
 	root_dir = (const struct root_dir){ 0 };
-
-	// Also write back data blocks???
-	// Could be done w/ block_write within fs_write
 
 	return 0;
 }
@@ -175,7 +169,7 @@ int fs_info(void)
 	// FAT Traversal
 	int free_data_blk_count = superblock.data_blk_count;
 	for (int i = 0; i < superblock.data_blk_count; ++i) {
-		if (FAT.entry[i] == '\0')
+		if (FAT[i] == '\0')
 			continue;
 		free_data_blk_count--;
 	}
@@ -360,7 +354,7 @@ int fs_lseek(int fd, size_t offset)
 
 	// Check if offset exceeds filesize
 	if ((size_t)file_size < offset)
-		fs_error("Requested offset surpasses file size boundaries");
+		fs_error("Requested offset surpasses file boundaries");
 
 	/* Perform lseek */
 	fd_list[fd].offset = offset;
@@ -389,9 +383,46 @@ int fs_write(int fd, void *buf, size_t count)
 	return 0;
 }
 
+/*
+* get_offset_data_blk - Retrieve offset'd data block
+* @offset: Offset
+* 
+* An existing offset (from a previous read or lseek) may push beyond 4096, thus spanning into a second data block.
+* This function should retrieve the correct data block to continue reading from.
+* 
+* Return: pointer to correct data block if successful, NULL otherwise 
+*/
+uint16_t fetch_offset_block_index(int fd)
+{
+	/* Block Offset */
+	// Get the number of blocks from the first data block where the offset is
+	uint16_t block_offset = 0;
+	for (uint32_t i = 0; i < fd_list[fd].offset; ++i) {
+		// If i is divisible by 4096, it is a new block.
+		if (i % BLOCK_SIZE || i == 0)
+			continue;
+
+		block_offset++;
+	}
+
+	/* Find the block in FAT to access */
+	// Begin with open file's first data block
+	uint16_t access_point = fd_list[fd].entry->data_blk;
+	for (uint16_t i = 0; i < block_offset; ++i) {
+		// Iteratively get linked blocks
+		access_point = FAT[access_point];
+	}
+
+	return access_point;
+}
+
 int fs_read(int fd, void *buf, size_t count)
 {
+	uint32_t total_count = 0;	// Max read is 8192 * 4096 bytes
+	uint16_t read_index;		// Block to read from
+
 	UNUSED(count);
+	UNUSED(total_count);
 
 	/* Error Checking */
 	// Check if FS is mounted
@@ -407,24 +438,31 @@ int fs_read(int fd, void *buf, size_t count)
 
 	/* Begin Read */
 
-	// Get the first block of the file and read it into bounce buffer
-	if (block_write(fd_list[fd].entry->data_blk, bounce) < 0)
-		fs_error("block_write");
-
 	/* Perform read of certain section
-	* 
+	*
 	*  1. Use a for loop to copy the bytes from bounce to buf
 	*	- Use the offset member from struct file_descriptor to account for offset
 	*  2. End the loop if the end of the data block is reached
 	*  3. If end of data block has been reached, refer to FAT block for next node
 	*	- To do this, write a file using fs_ref.x and try to examine its FAT structure using bash od
-	*  4. Continue this process until count or EOF has been reached (break from loop?)
+	*  4. Continue this process until count or EOF has been reached (while loop + break?)
 	*/
-	while () {
-		for (;;) {
+
+	// Account for offset extending into another datablock
+	read_index = fetch_offset_block_index(fd);
+
+	// Get the first block of the file and read it into bounce buffer
+	if (block_read(read_index, &bounce) < 0)
+		fs_error("block_read");
+
+	//while () {
+
+		// Continue from the remaining offset 
+		for (int i = fd_list[fd].offset % BLOCK_SIZE; i < BLOCK_SIZE; ++i) {
+
 
 		}
-	}
+	//}
 
 	return 0;
 }
