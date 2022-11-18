@@ -384,45 +384,35 @@ int fs_write(int fd, void *buf, size_t count)
 }
 
 /*
-* get_offset_data_blk - Retrieve offset'd data block
-* @offset: Offset
+* fetch_next_block - Retrieve specified block from chainlinked FAT
+* @current_block:  The current block being read
+* @FAT_entries_to_skip: The number of blocks from @block_to_access to iterate through before returning
 * 
-* An existing offset (from a previous read or lseek) may push beyond 4096, thus spanning into a second data block.
-* This function should retrieve the correct data block to continue reading from.
+* Attempt to find the block that is Y blocks past X, where X = @current_block and Y = @FAT_entries_to_skip. To simply find the
+* next block (say after reading entire current block), set @FAT_entries_to_skip = 1
 * 
-* Return: pointer to correct data block if successful, NULL otherwise 
+* Return: pointer to correct data block if successful, -1 otherwise
 */
-uint16_t fetch_offset_block_index(int fd)
+uint16_t fetch_data_block(uint16_t current_block, uint16_t FAT_entries_to_skip)
 {
-	/* Block Offset */
-	// Get the number of blocks from the first data block where the offset is
-	uint16_t block_offset = 0;
-	for (uint32_t i = 0; i < fd_list[fd].offset; ++i) {
-		// If i is divisible by 4096, it is a new block.
-		if (i % BLOCK_SIZE || i == 0)
-			continue;
-
-		block_offset++;
-	}
-
 	/* Find the block in FAT to access */
-	// Begin with open file's first data block
-	uint16_t access_point = fd_list[fd].entry->data_blk;
-	for (uint16_t i = 0; i < block_offset; ++i) {
+	for (uint16_t i = 0; i < FAT_entries_to_skip; ++i) {
 		// Iteratively get linked blocks
-		access_point = FAT[access_point];
+		current_block = FAT[current_block];
 	}
 
-	return access_point;
+	return current_block;
 }
 
 int fs_read(int fd, void *buf, size_t count)
 {
-	uint32_t total_count = 0;	// Max read is 8192 * 4096 bytes
-	uint16_t read_index;		// Block to read from
+	int32_t remaining_count = count;				// Max file size is ~33mil bytes, int32_t max is (+/-)2bil
+	uint32_t remaining_block_count = count / BLOCK_SIZE;		// Number of total blocks that must be read 
+	uint32_t reduced_offset = fd_list[fd].offset % BLOCK_SIZE;	// Offset value, notwithstanding the blocks prior
+	uint16_t current_block_index;					// The current block we are reading
+	uint16_t read_count;						// Number of bytes to read in current block
 
 	UNUSED(count);
-	UNUSED(total_count);
 
 	/* Error Checking */
 	// Check if FS is mounted
@@ -440,36 +430,42 @@ int fs_read(int fd, void *buf, size_t count)
 
 	/* Perform read of certain section
 	*
-	*  1. Use a for loop to copy the bytes from bounce to buf
-	*	- Use the offset member from struct file_descriptor to account for offset
-		- Could use memcpy()?
-	*  2. End the loop if the end of the data block is reached
-	*  3. If end of data block has been reached, refer to FAT block for next node
-	*	- To do this, write a file using fs_ref.x and try to examine its FAT structure using bash od
+	*  1. Use memcpy to copy bytes from bounce->buf
+	*	- Use the reduced_offset member from struct file_descriptor to account for beginning of read not starting at index 0 of block
+	*  2. Refer to FAT block for next node if there is still remaining count left
+	*	- To test this, write a file using fs_ref.x and try to examine its FAT structure using bash od
+	*  3. If count < BLOCK_SIZE, read for the remainder of count
 	*  4. Continue this process until count or EOF has been reached (while loop + break?)
 	*/
 
-	// Account for offset extending into another datablock
-	read_index = fetch_offset_block_index(fd);
+	/* THREE PHASES
+	* 1. Beginning of large read / a small read (could begin in middle of block)	DONE
+	* 2. Middle of large read (blocks at a time)					DONE
+	* 3. End of read (will not end perfectly at end of block)			
+	*/
 
-	// Get the first block of the file and read it into bounce buffer
-	if (block_read(read_index, &bounce) < 0)
-		fs_error("block_read");
+	// Account for offset possibly extending past first data block
+	current_block_index = fetch_data_block(fd_list[fd].entry->data_blk, fd_list[fd].offset / BLOCK_SIZE);
+	for (int i = 0; i < remaining_block_count; ++i) {
+		if (current_block_index == 0xFFFF)
+			break;
+		// Check if remaining count can be finished within current block
+		read_count = (remaining_count < BLOCK_SIZE - reduced_offset) ? remaining_count : BLOCK_SIZE - reduced_offset;
 
-	//while () {
+		// Read the offset'd block of the file into bounce buffer
+		if (block_read(current_block_index, &bounce) < 0)
+			fs_error("block_read");
 
-		// Continue from the remaining offset 
-		for (int i = fd_list[fd].offset % BLOCK_SIZE; i < BLOCK_SIZE; ++i, ++total_count) {
-			if (total_count == count)
-				break;
+		memcpy(buf, &bounce + reduced_offset, read_count);
+		remaining_block_count = remaining_block_count - read_count;
 
-			// now read @bounce byte by byte and copy to @buf
-			// Could use memcpy()?
-		}
-		if (i != BLOCK_SIZE) {
-			// total_count has been reached
-		}
-	//}
+		// Reset offset for memcpy()
+		if (reduced_offset)
+			reduced_offset = 0;
+
+		// Fetch next data block
+		current_block_index = fetch_data_block(current_block_index, 1);
+	}
 
 	return 0;
 }
