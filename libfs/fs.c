@@ -442,6 +442,7 @@ int fs_read(int fd, void *buf, size_t count)
 	*
 	*  1. Use a for loop to copy the bytes from bounce to buf
 	*	- Use the offset member from struct file_descriptor to account for offset
+		- Could use memcpy()?
 	*  2. End the loop if the end of the data block is reached
 	*  3. If end of data block has been reached, refer to FAT block for next node
 	*	- To do this, write a file using fs_ref.x and try to examine its FAT structure using bash od
@@ -458,9 +459,15 @@ int fs_read(int fd, void *buf, size_t count)
 	//while () {
 
 		// Continue from the remaining offset 
-		for (int i = fd_list[fd].offset % BLOCK_SIZE; i < BLOCK_SIZE; ++i) {
+		for (int i = fd_list[fd].offset % BLOCK_SIZE; i < BLOCK_SIZE; ++i, ++total_count) {
+			if (total_count == count)
+				break;
 
-
+			// now read @bounce byte by byte and copy to @buf
+			// Could use memcpy()?
+		}
+		if (i != BLOCK_SIZE) {
+			// total_count has been reached
 		}
 	//}
 
