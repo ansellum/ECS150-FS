@@ -364,7 +364,11 @@ int fs_lseek(int fd, size_t offset)
 
 int fs_write(int fd, void *buf, size_t count)
 {
-	UNUSED(count);
+	uint32_t counted = 0;						// Max file size is ~33mil bytes, int32_t max is (+/-)2bil
+	uint16_t remaining_block_count = (count / BLOCK_SIZE) + 1;	// Number of total blocks that must be read 
+	uint32_t reduced_offset = fd_list[fd].offset % BLOCK_SIZE;	// Offset value, notwithstanding the blocks prior
+	uint16_t current_block_index;					// The current block we are writing
+	uint16_t write_count;						// Number of bytes to write in current block
 
 	/* Error Checking */
 	// Check if FS is mounted
@@ -379,6 +383,36 @@ int fs_write(int fd, void *buf, size_t count)
 		fs_error("buf is NULL");
 
 	/* Begin Write */
+
+	// Account for offset possibly extending past first data block
+	current_block_index = fetch_data_block(fd_list[fd].entry->data_blk, fd_list[fd].offset / BLOCK_SIZE);
+	for (int i = 0; i < remaining_block_count; ++i, reduced_offset = 0) {
+		// If next block is end, make this the last iteration
+		if (current_block_index == 0xFFFF)
+			i = remaining_block_count;
+
+		// Find if read ends within current block (count - counted) or extends past (BLOCK_SIZE - reduced_offset)
+		write_count = (count - counted < BLOCK_SIZE - reduced_offset) ? count - counted : BLOCK_SIZE - reduced_offset;
+		
+		/* FROM PROJECT3.HTML DOC */
+
+		/* Step 1: Read the offset'd block of the file into bounce buffer */
+		if (block_read(current_block_index + superblock.data_blk, &bounce) < 0)
+			fs_error("block_read");
+
+		/* Step 2: MODIFY OFFSET'D BYTES OF BOUNCE */
+
+		/* Step 3: WRITE BACK BOUNCE */
+
+		/* Step 4: EXTEND FILE IF NECESSARY (i.e. if count still has elements) */
+
+		/* Step 5: MODIFY FAT TO LINK TOGETHER DATA BLOCKS (FIRST-AVAILABLE) */
+		
+		counted += write_count;
+
+		// Fetch next data block
+		current_block_index = fetch_data_block(current_block_index, 1);
+	}
 
 	return 0;
 }
