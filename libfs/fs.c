@@ -75,7 +75,7 @@ struct root_dir {
 
 struct data_block {
 	uint8_t byte[BLOCK_SIZE];
-};
+}__attribute__((packed));
 
 /**
 * A file descriptor is obtained using fs_open() and can support multiple operations (reading, writing, changing the file offset, etc).
@@ -458,7 +458,7 @@ int fs_read(int fd, void *buf, size_t count)
 		read_count = (count - counted < BLOCK_SIZE - reduced_offset) ? count - counted : BLOCK_SIZE - reduced_offset;
 
 		// Read the offset'd block of the file into bounce buffer
-		if (block_read(current_block_index, &bounce) < 0)
+		if (block_read(current_block_index + superblock.data_blk, &bounce) < 0)
 			fs_error("block_read");
 
 		memcpy(buf + counted, &bounce + reduced_offset, read_count);
