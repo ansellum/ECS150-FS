@@ -93,6 +93,32 @@ struct root_dir root_dir;
 struct data_block bounce;
 struct file_descriptor fd_list[FS_OPEN_MAX_COUNT];
 
+/* Helper Functions */
+
+/*
+* fetch_next_block - Retrieve specified block from chainlinked FAT
+* @current_block:  The current block being read
+* @FAT_entries_to_skip: The number of blocks from @block_to_access to iterate through before returning
+*
+* Attempt to find the block that is Y blocks past X, where X = @current_block and Y = @FAT_entries_to_skip. To simply find the
+* next block (say after reading entire current block), set @FAT_entries_to_skip = 1
+*
+* Return: pointer to correct data block if successful, -1 otherwise
+*/
+uint16_t fetch_data_block(uint16_t current_block, uint16_t FAT_entries_to_skip)
+{
+	/* Find the block in FAT to access */
+	for (uint16_t i = 0; i < FAT_entries_to_skip; ++i) {
+		if (current_block == 0xFFFF)
+			break;
+		// Iteratively get linked blocks
+		current_block = FAT[current_block];
+	}
+
+	return current_block;
+}
+
+
 /* Filesystem Functions */
 int fs_mount(const char *diskname)
 {
@@ -392,7 +418,8 @@ int fs_write(int fd, void *buf, size_t count)
 			i = remaining_block_count;
 
 		// Find if read ends within current block (count - counted) or extends past (BLOCK_SIZE - reduced_offset)
-		write_count = (count - counted < BLOCK_SIZE - reduced_offset) ? count - counted : BLOCK_SIZE - reduced_offset;
+		write_count = ( count - counted < BLOCK_SIZE - reduced_offset) ? 
+				count - counted : BLOCK_SIZE - reduced_offset;
 		
 		/* FROM PROJECT3.HTML DOC */
 
@@ -401,43 +428,20 @@ int fs_write(int fd, void *buf, size_t count)
 			fs_error("block_read");
 
 		/* Step 2: MODIFY OFFSET'D BYTES OF BOUNCE */
-
-		/* Step 3: WRITE BACK BOUNCE */
-
-		/* Step 4: EXTEND FILE IF NECESSARY (i.e. if count still has elements) */
-
-		/* Step 5: MODIFY FAT TO LINK TOGETHER DATA BLOCKS (FIRST-AVAILABLE) */
-		
+		memcpy(&bounce + reduced_offset, buf + counted, write_count);
 		counted += write_count;
 
-		// Fetch next data block
-		current_block_index = fetch_data_block(current_block_index, 1);
+		/* Step 3: WRITE BACK BOUNCE */
+		if (block_write(current_block_index + superblock.data_blk, &bounce) < 0)
+			fs_error("block_write");
+
+		/* Step 4: EXTEND FILE IF NECESSARY (i.e. if counted < count still) */
+
+		/* Step 5: MODIFY FAT TO LINK TOGETHER DATA BLOCKS (FIRST-AVAILABLE) */
+		// This step will be a function that can link a new data block in FAT, IF count - counted > 0
 	}
 
 	return 0;
-}
-
-/*
-* fetch_next_block - Retrieve specified block from chainlinked FAT
-* @current_block:  The current block being read
-* @FAT_entries_to_skip: The number of blocks from @block_to_access to iterate through before returning
-* 
-* Attempt to find the block that is Y blocks past X, where X = @current_block and Y = @FAT_entries_to_skip. To simply find the
-* next block (say after reading entire current block), set @FAT_entries_to_skip = 1
-* 
-* Return: pointer to correct data block if successful, -1 otherwise
-*/
-uint16_t fetch_data_block(uint16_t current_block, uint16_t FAT_entries_to_skip)
-{
-	/* Find the block in FAT to access */
-	for (uint16_t i = 0; i < FAT_entries_to_skip; ++i) {
-		if (current_block == 0xFFFF)
-			break;
-		// Iteratively get linked blocks
-		current_block = FAT[current_block];
-	}
-
-	return current_block;
 }
 
 int fs_read(int fd, void *buf, size_t count)
@@ -489,7 +493,8 @@ int fs_read(int fd, void *buf, size_t count)
 			i = remaining_block_count;
 
 		// Find if read ends within current block (count - counted) or extends past (BLOCK_SIZE - reduced_offset)
-		read_count = (count - counted < BLOCK_SIZE - reduced_offset) ? count - counted : BLOCK_SIZE - reduced_offset;
+		read_count = (  count - counted < BLOCK_SIZE - reduced_offset) ? 
+				count - counted : BLOCK_SIZE - reduced_offset;
 
 		// Read the offset'd block of the file into bounce buffer
 		if (block_read(current_block_index + superblock.data_blk, &bounce) < 0)
