@@ -1,6 +1,6 @@
 MOUNT
 CREATE	file_fs
 OPEN	file_fs
-WRITE	FILE	spamton.txt
+WRITE	FILE	txts/spamton.txt
 CLOSE	file_fs
 UNMOUNT

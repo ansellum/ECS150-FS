@@ -1,0 +1,8 @@
+MOUNT
+CREATE	file2
+OPEN	file2
+WRITE	FILE	txts/test4097.txt
+SEEK	4095
+WRITE	DATA	gunther
+CLOSE
+UMOUNT

@@ -1,0 +1,17 @@
+MOUNT
+CREATE	file2
+OPEN	file2
+WRITE	DATA	Downright awful
+SEEK	0
+WRITE	FILE	txts/test4095.txt
+WRITE	FILE	txts/test4097.txt
+WRITE	DATA	0
+SEEK	0
+READ	8193	FILE	txts/test8193.txt
+SEEK	4097
+WRITE	FILE	txts/test4096.txt
+WRITE	FILE	txts/test4097.txt
+WRITE	FILE	txts/test4095.txt
+WRITE	FILE	txts/test4096.txt
+CLOSE
+UMOUNT
