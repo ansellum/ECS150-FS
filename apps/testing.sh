@@ -5,7 +5,7 @@
 disk=$2
 
 if [ "$#" -lt 2 ]; then
-    printf "Usage: <diskname> <script filename>\n"
+    printf "Usage: <command> <diskname> <...>\n"
     printf "Possible commands are:\n"
     printf "\tinfo\n"
     printf "\tls\n"
@@ -26,8 +26,19 @@ printf "* fs_ref:\n"
 printf "\n* current:\n"
 ./test_fs.x $1 "${disk}_CUR" ${@:3}
 
-printf "\n** DISK DIFF **\n"
-diff "${disk}_REF" "${disk}_CUR"
+## FOR VIEWING ENTIRE FILE ##
+
+#printf "\n** FS_REF DISK **\n"
+#od -x "${disk}_REF"
+
+#printf "\n** TEST_FS DISK **\n"
+#od -x "${disk}_CUR"
+
+## FOR VIEWING CMP ##
+printf "\n** DIFF REF CUR **\n"
+if cmp -b "${disk}_REF" "${disk}_CUR" | grep 'differ'; then
+	diff -y --suppress-common-lines <(od -x ${disk}_REF) <(od -x ${disk}_CUR)
+fi
 
 rm "${disk}_REF"
 rm "${disk}_CUR"

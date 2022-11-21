@@ -1,6 +1,5 @@
 MOUNT
-CREATE	file_fs
 OPEN	file_fs
-WRITE	DATA	1
+WRITE	DATA	Say, "fuzzy pickles!"
 CLOSE	file_fs
 UNMOUNT

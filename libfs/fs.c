@@ -107,17 +107,53 @@ struct file_descriptor fd_list[FS_OPEN_MAX_COUNT];
 */
 uint16_t fetch_data_block(uint16_t current_block, uint16_t FAT_entries_to_skip)
 {
+	printf("current_block:%u\n", current_block);
+	printf("FAT_entries_to_skip:%u\n", FAT_entries_to_skip);
 	/* Find the block in FAT to access */
 	for (uint16_t i = 0; i < FAT_entries_to_skip; ++i) {
-		if (current_block == 0xFFFF)
+		// Break if end of file is found
+		if (current_block == FAT_EOC)
 			break;
+
 		// Iteratively get linked blocks
 		current_block = FAT[current_block];
 	}
 
+	printf("new current_block:%u\n", current_block);
 	return current_block;
 }
 
+uint16_t link_data_block(uint16_t current_block)
+{
+	/* Loop through FAT to find first available block */
+	int free_index = 1;
+	for (; free_index < superblock.fat_blk_count * FS_FAT_ENTRY_MAX_COUNT; ++free_index) {
+		if (FAT[free_index] == 0)
+			break;
+	}
+
+	// Link new data block and set new FAT entry to indicate end of chain
+	FAT[current_block] = free_index;
+	FAT[free_index] = FAT_EOC;
+
+	return free_index;
+}
+
+uint16_t create_data_block(int fd)
+{
+	/* Loop through FAT to find first available block */
+	int free_index = 0;
+	for (; free_index < superblock.fat_blk_count * FS_FAT_ENTRY_MAX_COUNT; ++free_index) {
+		if (FAT[free_index] == 0)
+			break;
+	}
+
+	// Link new data block and set new FAT entry to indicate end of chain
+	fd_list[fd].entry->data_blk = free_index;
+	FAT[free_index] = FAT_EOC;
+
+	return free_index;
+}
 
 /* Filesystem Functions */
 int fs_mount(const char *diskname)
@@ -263,6 +299,10 @@ int fs_delete(const char *filename)
 		fs_error("Filename is invalid (either NULL or empty)");
 
 	/* TODO: CHECK IF FILE IS OPEN */
+	for (int i = 0; i < FS_OPEN_MAX_COUNT; ++i) {
+		if (strcmp(filename, (char*) fd_list[i].entry->file_name) == 0)
+			fs_error("Filename is currently open");
+	}
 
 	/* Find File in Root Directory */
 	int death_index = 0;
@@ -392,7 +432,7 @@ int fs_write(int fd, void *buf, size_t count)
 {
 	uint32_t counted = 0;						// Max file size is ~33mil bytes, int32_t max is (+/-)2bil
 	uint16_t remaining_block_count = (count / BLOCK_SIZE) + 1;	// Number of total blocks that must be read 
-	uint32_t reduced_offset = fd_list[fd].offset % BLOCK_SIZE;	// Offset value, notwithstanding the blocks prior
+	uint16_t reduced_offset = fd_list[fd].offset % BLOCK_SIZE;	// Offset value, notwithstanding the blocks prior
 	uint16_t current_block_index;					// The current block we are writing
 	uint16_t write_count;						// Number of bytes to write in current block
 
@@ -410,46 +450,51 @@ int fs_write(int fd, void *buf, size_t count)
 
 	/* Begin Write */
 
-	// Account for offset possibly extending past first data block
-	current_block_index = fetch_data_block(fd_list[fd].entry->data_blk, fd_list[fd].offset / BLOCK_SIZE);
+	// If data_blk = FAT_EOC, file is new. Otherwise, fetch existing data_blk
+	current_block_index = (fd_list[fd].entry->data_blk == FAT_EOC) ? create_data_block(fd) : fd_list[fd].entry->data_blk;
 	for (int i = 0; i < remaining_block_count; ++i, reduced_offset = 0) {
-		// If next block is end, make this the last iteration
-		if (current_block_index == 0xFFFF)
-			i = remaining_block_count;
+		// Find if write ends within current block (count - counted) or extends past (BLOCK_SIZE - reduced_offset)
+		// always <= 4096
+		write_count = ( count - counted < (unsigned)BLOCK_SIZE - reduced_offset) ?
+				count - counted : (unsigned)BLOCK_SIZE - reduced_offset;
 
-		// Find if read ends within current block (count - counted) or extends past (BLOCK_SIZE - reduced_offset)
-		write_count = ( count - counted < BLOCK_SIZE - reduced_offset) ? 
-				count - counted : BLOCK_SIZE - reduced_offset;
-		
 		/* FROM PROJECT3.HTML DOC */
 
 		/* Step 1: Read the offset'd block of the file into bounce buffer */
 		if (block_read(current_block_index + superblock.data_blk, &bounce) < 0)
 			fs_error("block_read");
 
-		/* Step 2: MODIFY OFFSET'D BYTES OF BOUNCE */
-		memcpy(&bounce + reduced_offset, buf + counted, write_count);
+		/* Step 2: Modify offset-bytes of bounce */
+		memcpy(&bounce.byte[reduced_offset], buf + counted, write_count);
+
 		counted += write_count;
 
-		/* Step 3: WRITE BACK BOUNCE */
+		/* Step 3: Write back bounce */
 		if (block_write(current_block_index + superblock.data_blk, &bounce) < 0)
 			fs_error("block_write");
 
-		/* Step 4: EXTEND FILE IF NECESSARY (i.e. if counted < count still) */
+		/* Step 4: Modify FAT to link the next block in entry */
+		// Do not link FAT if count was reached (should only break on last write)
+		if (counted == count)
+			break;
 
-		/* Step 5: MODIFY FAT TO LINK TOGETHER DATA BLOCKS (FIRST-AVAILABLE) */
-		// This step will be a function that can link a new data block in FAT, IF count - counted > 0
+		reduced_offset = 0;
+		current_block_index = link_data_block(current_block_index);
 	}
+	fd_list[fd].offset += counted;
 
-	return 0;
+	// Increase file size if offset goes beyond size
+	if (fd_list[fd].entry->file_size < fd_list[fd].offset)
+		fd_list[fd].entry->file_size = fd_list[fd].offset;
+
+	return counted;
 }
 
 int fs_read(int fd, void *buf, size_t count)
 {
-
 	uint32_t counted = 0;						// Max file size is ~33mil bytes, int32_t max is (+/-)2bil
 	uint16_t remaining_block_count = (count / BLOCK_SIZE) + 1;	// Number of total blocks that must be read 
-	uint32_t reduced_offset = fd_list[fd].offset % BLOCK_SIZE;	// Offset value, notwithstanding the blocks prior
+	uint16_t reduced_offset = fd_list[fd].offset % BLOCK_SIZE;	// Offset value, notwithstanding the blocks prior
 	uint16_t current_block_index;					// The current block we are reading
 	uint16_t read_count;						// Number of bytes to read in current block
 
@@ -489,23 +534,25 @@ int fs_read(int fd, void *buf, size_t count)
 	current_block_index = fetch_data_block(fd_list[fd].entry->data_blk, fd_list[fd].offset / BLOCK_SIZE);
 	for (int i = 0; i < remaining_block_count; ++i, reduced_offset = 0) {
 		// If next block is end, make this the last iteration
-		if (current_block_index == 0xFFFF)
+		if (current_block_index == FAT_EOC)
 			i = remaining_block_count;
 
 		// Find if read ends within current block (count - counted) or extends past (BLOCK_SIZE - reduced_offset)
-		read_count = (  count - counted < BLOCK_SIZE - reduced_offset) ? 
-				count - counted : BLOCK_SIZE - reduced_offset;
+		read_count = (  count - counted < (unsigned)BLOCK_SIZE - reduced_offset) ? 
+				count - counted : (unsigned)BLOCK_SIZE - reduced_offset;
 
 		// Read the offset'd block of the file into bounce buffer
 		if (block_read(current_block_index + superblock.data_blk, &bounce) < 0)
 			fs_error("block_read");
 
-		memcpy(buf + counted, &bounce + reduced_offset, read_count);
+		// Copy bytes from bounce buffer to requested pointer
+		memcpy(buf + counted, &bounce.byte[reduced_offset], read_count);
 		counted += read_count;
 
 		// Fetch next data block
 		current_block_index = fetch_data_block(current_block_index, 1);
 	}
+	fd_list[fd].offset += counted;
 
 	return counted;
 }
