@@ -1,10 +1,11 @@
 MOUNT
 CREATE	file1
 OPEN	file1
-WRITE	FILE	test6000.txt
-SEEK	10
-WRITE	FILE	test38.txt
+WRITE	FILE	alphabet.txt
+SEEK	3
+WRITE	FILE	spamton.txt
 SEEK	0
-READ	6000	FILE	test6000.txt
+READ	26	FILE	alphabet_spamton.txt
 CLOSE	file1
+DELETE	file1
 UMOUNT

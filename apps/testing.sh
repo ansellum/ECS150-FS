@@ -26,18 +26,16 @@ printf "* fs_ref:\n"
 printf "\n* current:\n"
 ./test_fs.x $1 "${disk}_CUR" ${@:3}
 
-## FOR VIEWING ENTIRE FILE ##
-
-#printf "\n** FS_REF DISK **\n"
-#od -x "${disk}_REF"
-
-#printf "\n** TEST_FS DISK **\n"
-#od -x "${disk}_CUR"
-
 ## FOR VIEWING CMP ##
-printf "\n** DIFF REF CUR **\n"
 if cmp -b "${disk}_REF" "${disk}_CUR" | grep 'differ'; then
-	diff -y --suppress-common-lines <(od -x ${disk}_REF) <(od -x ${disk}_CUR)
+    #printf "**\n FS_REF DISK **\n"
+    #od -x "${disk}_REF"
+
+    #printf "\n** TEST_FS DISK **\n"
+    #od -x "${disk}_CUR"
+    
+    printf "\n** DIFF REF CUR **\n"
+	diff -y <(od -x ${disk}_REF) <(od -x ${disk}_CUR)
 fi
 
 rm "${disk}_REF"

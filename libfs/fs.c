@@ -107,8 +107,6 @@ struct file_descriptor fd_list[FS_OPEN_MAX_COUNT];
 */
 uint16_t fetch_data_block(uint16_t current_block, uint16_t FAT_entries_to_skip)
 {
-	printf("current_block:%u\n", current_block);
-	printf("FAT_entries_to_skip:%u\n", FAT_entries_to_skip);
 	/* Find the block in FAT to access */
 	for (uint16_t i = 0; i < FAT_entries_to_skip; ++i) {
 		// Break if end of file is found
@@ -119,7 +117,6 @@ uint16_t fetch_data_block(uint16_t current_block, uint16_t FAT_entries_to_skip)
 		current_block = FAT[current_block];
 	}
 
-	printf("new current_block:%u\n", current_block);
 	return current_block;
 }
 
@@ -300,6 +297,10 @@ int fs_delete(const char *filename)
 
 	// Check if file is open
 	for (int i = 0; i < FS_OPEN_MAX_COUNT; ++i) {
+		// Skip if fd is closed
+		if (fd_list[i].entry == NULL)
+			continue;
+
 		if (strcmp(filename, (char*) fd_list[i].entry->file_name) == 0)
 			fs_error("Filename is currently open");
 	}
@@ -318,6 +319,22 @@ int fs_delete(const char *filename)
 
 	/* Delete File */
 	root_dir.file[death_index].file_name[0] = '\0';
+
+	/* Make FAT available */
+	// Checks to see if file has content (created but unwritten files will have FAT_EOC)
+	if (root_dir.file[death_index].data_blk == FAT_EOC)
+		return 0;
+
+	// File has content
+	int index = root_dir.file[death_index].data_blk;
+	do {
+		int next = FAT[index];
+		FAT[index] = 0x0;
+		index = next;
+
+	} while (index != FAT_EOC);
+
+	root_dir.file[death_index].data_blk = '\0';
 
 	return 0;
 }
