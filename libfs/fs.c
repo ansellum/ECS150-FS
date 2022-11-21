@@ -298,7 +298,7 @@ int fs_delete(const char *filename)
 	if (filename == NULL || filename[0] == '\0')
 		fs_error("Filename is invalid (either NULL or empty)");
 
-	/* TODO: CHECK IF FILE IS OPEN */
+	// Check if file is open
 	for (int i = 0; i < FS_OPEN_MAX_COUNT; ++i) {
 		if (strcmp(filename, (char*) fd_list[i].entry->file_name) == 0)
 			fs_error("Filename is currently open");
@@ -450,7 +450,7 @@ int fs_write(int fd, void *buf, size_t count)
 
 	/* Begin Write */
 
-	// If data_blk = FAT_EOC, file is new. Otherwise, fetch existing data_blk
+	// If data_blk = FAT_EOC, file is new. Otherwise, file exists.
 	current_block_index = (fd_list[fd].entry->data_blk == FAT_EOC) ? create_data_block(fd) : fd_list[fd].entry->data_blk;
 	for (int i = 0; i < remaining_block_count; ++i, reduced_offset = 0) {
 		// Find if write ends within current block (count - counted) or extends past (BLOCK_SIZE - reduced_offset)
@@ -483,7 +483,7 @@ int fs_write(int fd, void *buf, size_t count)
 	}
 	fd_list[fd].offset += counted;
 
-	// Increase file size if offset goes beyond size
+	// Increase stored size iff offset extends beyond stored size AFTER WRITE
 	if (fd_list[fd].entry->file_size < fd_list[fd].offset)
 		fd_list[fd].entry->file_size = fd_list[fd].offset;
 

@@ -1,0 +1,6 @@
+MOUNT
+CREATE	file1
+OPEN	file1
+WRITE	FILE	test6000.txt
+CLOSE	file1
+UNMOUNT
