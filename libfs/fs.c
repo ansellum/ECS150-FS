@@ -129,7 +129,7 @@ uint16_t link_data_block(uint16_t current_block)
 			break;
 	}
 
-	// Link new data block and set new FAT entry to indicate end of chain
+	// Link current FAT entry to new FAT entry and new FAT entry to end of chain
 	FAT[current_block] = free_index;
 	FAT[free_index] = FAT_EOC;
 
@@ -145,8 +145,10 @@ uint16_t create_data_block(int fd)
 			break;
 	}
 
-	// Link new data block and set new FAT entry to indicate end of chain
+	// Link root directory entry to data block 
 	fd_list[fd].entry->data_blk = free_index;
+
+	// Link new (only) FAT entry to end of chain
 	FAT[free_index] = FAT_EOC;
 
 	return free_index;
@@ -447,11 +449,11 @@ int fs_lseek(int fd, size_t offset)
 
 int fs_write(int fd, void *buf, size_t count)
 {
-	uint32_t counted = 0;						// Max file size is ~33mil bytes, int32_t max is (+/-)2bil
-	uint16_t remaining_block_count = (count / BLOCK_SIZE) + 1;	// Number of total blocks that must be read 
-	uint16_t reduced_offset = fd_list[fd].offset % BLOCK_SIZE;	// Offset value, notwithstanding the blocks prior
-	uint16_t current_block_index;					// The current block we are writing
-	uint16_t write_count;						// Number of bytes to write in current block
+	uint32_t counted = 0;							// Max file size is ~33mil bytes, int32_t max is (+/-)2bil
+	uint16_t remaining_block_count = ((count - 1) / BLOCK_SIZE) + 1;	// Number of total blocks that must be read; must account for full block write (4096)
+	uint16_t reduced_offset = fd_list[fd].offset % BLOCK_SIZE;		// Offset value, notwithstanding the blocks prior
+	uint16_t current_block_index;						// The current block we are writing
+	uint16_t write_count;							// Number of bytes to write in current block
 
 	/* Error Checking */
 	// Check if FS is mounted
@@ -470,12 +472,9 @@ int fs_write(int fd, void *buf, size_t count)
 	// If data_blk = FAT_EOC, file is new. Otherwise, file exists.
 	current_block_index = (fd_list[fd].entry->data_blk == FAT_EOC) ? create_data_block(fd) : fd_list[fd].entry->data_blk;
 	for (int i = 0; i < remaining_block_count; ++i, reduced_offset = 0) {
-		// Find if write ends within current block (count - counted) or extends past (BLOCK_SIZE - reduced_offset)
-		// always <= 4096
+		// Find if write ends within current block (count - counted) or extends past (BLOCK_SIZE - reduced_offset) [always <= 4096]
 		write_count = ( count - counted < (unsigned)BLOCK_SIZE - reduced_offset) ?
 				count - counted : (unsigned)BLOCK_SIZE - reduced_offset;
-
-		/* FROM PROJECT3.HTML DOC */
 
 		/* Step 1: Read the offset'd block of the file into bounce buffer */
 		if (block_read(current_block_index + superblock.data_blk, &bounce) < 0)
@@ -483,24 +482,22 @@ int fs_write(int fd, void *buf, size_t count)
 
 		/* Step 2: Modify offset-bytes of bounce */
 		memcpy(&bounce.byte[reduced_offset], buf + counted, write_count);
-
 		counted += write_count;
 
 		/* Step 3: Write back bounce */
 		if (block_write(current_block_index + superblock.data_blk, &bounce) < 0)
 			fs_error("block_write");
 
-		/* Step 4: Modify FAT to link the next block in entry */
-		// Do not link FAT if count was reached (should only break on last write)
-		if (counted == count)
+		// Break if an adequate number of bytes were counted
+		if (counted >= count)
 			break;
 
-		reduced_offset = 0;
+		/* Step 4: Modify FAT to link the next block in entry */
 		current_block_index = link_data_block(current_block_index);
 	}
 	fd_list[fd].offset += counted;
 
-	// Increase stored size iff offset extends beyond stored size AFTER WRITE
+	// Increase file size metadata if offset extends beyond stored size
 	if (fd_list[fd].entry->file_size < fd_list[fd].offset)
 		fd_list[fd].entry->file_size = fd_list[fd].offset;
 
@@ -509,15 +506,14 @@ int fs_write(int fd, void *buf, size_t count)
 
 int fs_read(int fd, void *buf, size_t count)
 {
-	uint32_t counted = 0;						// Max file size is ~33mil bytes, int32_t max is (+/-)2bil
-	uint16_t remaining_block_count = (count / BLOCK_SIZE) + 1;	// Number of total blocks that must be read 
-	uint16_t reduced_offset = fd_list[fd].offset % BLOCK_SIZE;	// Offset value, notwithstanding the blocks prior
-	uint16_t current_block_index;					// The current block we are reading
-	uint16_t read_count;						// Number of bytes to read in current block
-
-	UNUSED(count);
+	uint32_t counted = 0;							// Max file size is ~33mil bytes, int32_t max is (+/-)2bil
+	uint16_t remaining_block_count = ((count - 1) / BLOCK_SIZE) + 1;	// Number of total blocks that must be read; must account for full block read (4096)
+	uint16_t reduced_offset = fd_list[fd].offset % BLOCK_SIZE;		// Offset value, notwithstanding the blocks prior
+	uint16_t current_block_index;						// The current block we are reading
+	uint16_t read_count;							// Number of bytes to read in current block
 
 	/* Error Checking */
+
 	// Check if FS is mounted
 	if (superblock.sig != SIGNATURE)
 		fs_error("Filesystem not mounted");
@@ -531,42 +527,26 @@ int fs_read(int fd, void *buf, size_t count)
 
 	/* Begin Read */
 
-	/* Perform read of certain section
-	*
-	*  1. Use memcpy to copy bytes from bounce->buf
-	*	- Use the reduced_offset member from struct file_descriptor to account for beginning of read not starting at index 0 of block
-	*  2. Refer to FAT block for next node if there is still remaining count left
-	*	- To test this, write a file using fs_ref.x and try to examine its FAT structure using bash od
-	*  3. If count < BLOCK_SIZE, read for the remainder of count
-	*  4. Continue this process until count or EOF has been reached (while loop + break?)
-	*/
-
-	/* THREE PHASES
-	* 1. Beginning of large read / a small read (could begin in middle of block)	DONE
-	* 2. Middle of large read (blocks at a time)					DONE
-	* 3. End of read (will not end perfectly at end of block)			DONE
-	*/
-
 	// Account for offset possibly extending past first data block
 	current_block_index = fetch_data_block(fd_list[fd].entry->data_blk, fd_list[fd].offset / BLOCK_SIZE);
 	for (int i = 0; i < remaining_block_count; ++i, reduced_offset = 0) {
-		// If next block is end, make this the last iteration
-		if (current_block_index == FAT_EOC)
-			i = remaining_block_count;
-
 		// Find if read ends within current block (count - counted) or extends past (BLOCK_SIZE - reduced_offset)
 		read_count = (  count - counted < (unsigned)BLOCK_SIZE - reduced_offset) ? 
 				count - counted : (unsigned)BLOCK_SIZE - reduced_offset;
 
-		// Read the offset'd block of the file into bounce buffer
+		/* STEP 1: Read the offset'd block of the file into bounce buffer */ 
 		if (block_read(current_block_index + superblock.data_blk, &bounce) < 0)
 			fs_error("block_read");
 
-		// Copy bytes from bounce buffer to requested pointer
+		/* STEP 2: Copy bytes from bounce buffer to requested pointer */
 		memcpy(buf + counted, &bounce.byte[reduced_offset], read_count);
 		counted += read_count;
 
-		// Fetch next data block
+		// Break if no more blocks
+		if (current_block_index == FAT_EOC)
+			break;
+
+		/* STEP 3: Fetch next data block */
 		current_block_index = fetch_data_block(current_block_index, 1);
 	}
 	fd_list[fd].offset += counted;
