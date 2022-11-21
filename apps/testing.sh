@@ -28,14 +28,15 @@ printf "\n* current:\n"
 
 ## FOR VIEWING CMP ##
 if cmp -b "${disk}_REF" "${disk}_CUR" | grep 'differ'; then
-    #printf "**\n FS_REF DISK **\n"
+    printf "\n** DIFF REF CUR **\n"
+	diff -y <(od -x ${disk}_REF) <(od -x ${disk}_CUR)
+#else
+    #printf "\n** FS_REF DISK **\n"
     #od -x "${disk}_REF"
 
     #printf "\n** TEST_FS DISK **\n"
     #od -x "${disk}_CUR"
     
-    printf "\n** DIFF REF CUR **\n"
-	diff -y <(od -x ${disk}_REF) <(od -x ${disk}_CUR)
 fi
 
 rm "${disk}_REF"

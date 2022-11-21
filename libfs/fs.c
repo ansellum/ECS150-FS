@@ -109,11 +109,6 @@ uint16_t fetch_data_block(uint16_t current_block, uint16_t FAT_entries_to_skip)
 {
 	/* Find the block in FAT to access */
 	for (uint16_t i = 0; i < FAT_entries_to_skip; ++i) {
-		// Break if end of file is found
-		if (current_block == FAT_EOC)
-			break;
-
-		// Iteratively get linked blocks
 		current_block = FAT[current_block];
 	}
 
@@ -525,7 +520,7 @@ int fs_read(int fd, void *buf, size_t count)
 {
 	uint32_t counted = 0;
 	uint16_t reduced_offset = fd_list[fd].offset % BLOCK_SIZE;
-	uint16_t remaining_block_count = ((count + reduced_offset) / BLOCK_SIZE) + 1;	// Number of total blocks that must be read; must account for full block read w/ offset (4096)
+	uint16_t remaining_block_count = ((count + reduced_offset) / BLOCK_SIZE) + 1;	// Number of total blocks that must be written, accounting for offset
 	uint16_t current_block_index;
 	uint16_t read_count;
 
@@ -570,7 +565,7 @@ int fs_read(int fd, void *buf, size_t count)
 		fd_list[fd].offset += read_count;
 
 		// Break if no more blocks
-		if (current_block_index == FAT_EOC)
+		if (FAT[current_block_index] == FAT_EOC)
 			break;
 
 		/* STEP 3: Fetch next data block */
