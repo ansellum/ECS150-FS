@@ -457,8 +457,8 @@ int fs_lseek(int fd, size_t offset)
 int fs_write(int fd, void *buf, size_t count)
 {
 	uint32_t counted = 0;
-	uint16_t remaining_block_count = ((count - 1) / BLOCK_SIZE) + 1;	// Number of total blocks that must be written, accounting for offset
-	uint16_t reduced_offset = fd_list[fd].offset % BLOCK_SIZE;		// Offset value, notwithstanding the blocks prior
+	uint16_t reduced_offset = fd_list[fd].offset % BLOCK_SIZE;
+	uint16_t remaining_block_count = ((count + reduced_offset) / BLOCK_SIZE) + 1;	// Number of total blocks that must be written, accounting for offset
 	uint16_t current_block_index;
 	uint16_t write_count;
 
@@ -477,7 +477,15 @@ int fs_write(int fd, void *buf, size_t count)
 	/* Begin Write */
 
 	// If data_blk = FAT_EOC, file is new. Otherwise, file exists.
-	current_block_index = (fd_list[fd].entry->data_blk == FAT_EOC) ? create_data_block(fd) : fd_list[fd].entry->data_blk;
+	current_block_index = (fd_list[fd].entry->data_blk == FAT_EOC) ?
+		create_data_block(fd) : fetch_data_block(fd_list[fd].entry->data_blk, fd_list[fd].offset / BLOCK_SIZE);
+
+	// Special case: If offset is at EOC, extend before write
+	if (reduced_offset == 0 && fd_list[fd].offset > 0 && current_block_index == FAT_EOC) {
+		uint16_t last_data_block = fetch_data_block(fd_list[fd].entry->data_blk, (fd_list[fd].offset / BLOCK_SIZE) - 1);
+		current_block_index = link_data_block(last_data_block);
+	}
+
 	for (int i = 0; i < remaining_block_count; ++i, reduced_offset = 0) {
 		// Find if write ends within current block (count - counted) or extends past (BLOCK_SIZE - reduced_offset) [always <= 4096]
 		write_count = ( count - counted < (unsigned)BLOCK_SIZE - reduced_offset) ?
@@ -502,7 +510,8 @@ int fs_write(int fd, void *buf, size_t count)
 			break;
 
 		/* Step 4: Modify FAT to link the next block in entry */
-		current_block_index = link_data_block(current_block_index);
+		current_block_index = (FAT[current_block_index] == FAT_EOC) ?
+			link_data_block(current_block_index) : fetch_data_block(current_block_index, 1);
 	}
 
 	// Increase file size metadata if offset extends beyond stored size
@@ -515,8 +524,8 @@ int fs_write(int fd, void *buf, size_t count)
 int fs_read(int fd, void *buf, size_t count)
 {
 	uint32_t counted = 0;
-	uint16_t remaining_block_count = ((count - 1) / BLOCK_SIZE) + 1;	// Number of total blocks that must be read; must account for full block read w/ offset (4096)
-	uint16_t reduced_offset = fd_list[fd].offset % BLOCK_SIZE;				// Offset value, notwithstanding the blocks prior
+	uint16_t reduced_offset = fd_list[fd].offset % BLOCK_SIZE;
+	uint16_t remaining_block_count = ((count + reduced_offset) / BLOCK_SIZE) + 1;	// Number of total blocks that must be read; must account for full block read w/ offset (4096)
 	uint16_t current_block_index;
 	uint16_t read_count;
 
