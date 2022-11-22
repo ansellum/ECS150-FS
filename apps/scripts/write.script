@@ -1,0 +1,6 @@
+MOUNT
+OPEN	file_fs
+SEEK	0
+WRITE	DATA	Say, "fuzzy pickles!"
+CLOSE	file_fs
+UNMOUNT

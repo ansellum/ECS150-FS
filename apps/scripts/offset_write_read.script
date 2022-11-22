@@ -1,0 +1,11 @@
+MOUNT
+CREATE	file1
+OPEN	file1
+WRITE	FILE	txts/alphabet.txt
+SEEK	3
+WRITE	FILE	txts/spamton.txt
+SEEK	0
+READ	26	FILE	txts/alphabet_spamton.txt
+CLOSE	file1
+DELETE	file1
+UMOUNT

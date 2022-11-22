@@ -1,0 +1,19 @@
+MOUNT
+CREATE	file2
+OPEN	file2
+WRITE	DATA	Downright awful
+SEEK	2
+WRITE	DATA	opleft great
+SEEK	6
+READ	4096	DATA	Doopleft greatl
+SEEK	1
+WRITE	FILE	txts/test4095.txt
+WRITE	FILE	txts/test4096.txt
+WRITE	FILE	txts/test4097.txt
+WRITE	DATA	0
+SEEK	0
+WRITE	FILE	txts/test4095.txt
+WRITE	FILE	txts/test4096.txt
+WRITE	FILE	txts/test4097.txt
+CLOSE
+UMOUNT
