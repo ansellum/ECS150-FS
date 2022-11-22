@@ -469,6 +469,9 @@ int fs_write(int fd, void *buf, size_t count)
 	if (buf == NULL)
 		fs_error("buf is NULL");
 
+	if (count == 0)
+		return 0;
+
 	/* Begin Write */
 
 	// If data_blk = FAT_EOC, file is new. Otherwise, file exists.
@@ -492,7 +495,6 @@ int fs_write(int fd, void *buf, size_t count)
 
 		/* Step 2: Modify offset-bytes of bounce */
 		memcpy(&bounce.byte[reduced_offset], buf + counted, write_count);
-
 		counted += write_count;
 		fd_list[fd].offset += write_count;
 
