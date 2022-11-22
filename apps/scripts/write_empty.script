@@ -1,0 +1,6 @@
+MOUNT
+CREATE	file_fs
+OPEN	file_fs
+WRITE	FILE	txts/empty.txt
+CLOSE	file_fs
+UNMOUNT
